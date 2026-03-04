@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, MapPin, TrendingUp, Shield, Users, ArrowRight, Star, CheckCircle2,
-  TreePine, Home, Building2, Sprout, ChevronRight } from 'lucide-react'
+  TreePine, Home as HomeIcon, Building2, Sprout, ChevronRight } from 'lucide-react'
 import ListingCard from '../components/ListingCard'
 import { LISTINGS, STATS, STATES, LAND_TYPES } from '../data/listings'
 
@@ -14,7 +14,7 @@ const STEPS = [
 
 const LAND_CATEGORIES = [
   { icon: Sprout, label: 'Agricultural', value: 'agricultural', count: '4,280+', color: 'bg-green-100 text-green-700 hover:bg-green-200' },
-  { icon: Home, label: 'Residential', value: 'residential', count: '3,150+', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
+  { icon: HomeIcon, label: 'Residential', value: 'residential', count: '3,150+', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
   { icon: Building2, label: 'Commercial', value: 'commercial', count: '1,840+', color: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },
   { icon: TreePine, label: 'Farm Land', value: 'farm', count: '2,010+', color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' },
 ]
