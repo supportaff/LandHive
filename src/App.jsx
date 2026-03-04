@@ -12,6 +12,8 @@ import AdminPanel from './pages/AdminPanel'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import RoleSelect from './pages/RoleSelect'
+import Terms from './pages/Terms'
+import RefundPolicy from './pages/RefundPolicy'
 import { AuthContext } from './hooks/useAuth'
 
 export default function App() {
@@ -34,6 +36,8 @@ export default function App() {
               <Route path="/sign-in" element={<SignIn />} />
               <Route path="/sign-up" element={<SignUp />} />
               <Route path="/role-select" element={<RoleSelect />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/refund" element={<RefundPolicy />} />
             </Routes>
           </main>
           <Footer />
