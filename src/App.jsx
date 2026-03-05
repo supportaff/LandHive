@@ -14,6 +14,8 @@ import SignUp from './pages/SignUp'
 import RoleSelect from './pages/RoleSelect'
 import Terms from './pages/Terms'
 import RefundPolicy from './pages/RefundPolicy'
+import PaymentSuccess from './pages/PaymentSuccess'
+import PaymentFailure from './pages/PaymentFailure'
 import { AuthContext } from './hooks/useAuth'
 
 export default function App() {
@@ -26,18 +28,21 @@ export default function App() {
           <Navbar />
           <main className="flex-1">
             <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/search" element={<Search />} />
-              <Route path="/listing/:id" element={<ListingDetail />} />
-              <Route path="/post" element={<PostListing />} />
-              <Route path="/dashboard/seller" element={<SellerDashboard />} />
-              <Route path="/dashboard/buyer" element={<BuyerDashboard />} />
-              <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/sign-in" element={<SignIn />} />
-              <Route path="/sign-up" element={<SignUp />} />
-              <Route path="/role-select" element={<RoleSelect />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/refund" element={<RefundPolicy />} />
+              <Route path="/"                   element={<Home />} />
+              <Route path="/search"             element={<Search />} />
+              <Route path="/listing/:id"        element={<ListingDetail />} />
+              <Route path="/post"               element={<PostListing />} />
+              <Route path="/dashboard/seller"   element={<SellerDashboard />} />
+              <Route path="/dashboard/buyer"    element={<BuyerDashboard />} />
+              <Route path="/admin"              element={<AdminPanel />} />
+              <Route path="/sign-in"            element={<SignIn />} />
+              <Route path="/sign-up"            element={<SignUp />} />
+              <Route path="/role-select"        element={<RoleSelect />} />
+              <Route path="/terms"              element={<Terms />} />
+              <Route path="/refund"             element={<RefundPolicy />} />
+              {/* PayU return pages */}
+              <Route path="/payment/success"    element={<PaymentSuccess />} />
+              <Route path="/payment/failure"    element={<PaymentFailure />} />
             </Routes>
           </main>
           <Footer />
