@@ -1,6 +1,14 @@
 // src/data/listings.js
 // Shared data & helpers used across LandHive frontend
 
+// ─── States (Tamil Nadu first — more coming) ─────────────────────────────────
+export const STATES = [
+  'Tamil Nadu',
+  // 'Karnataka',   // coming soon
+  // 'Kerala',      // coming soon
+  // 'Andhra Pradesh', // coming soon
+]
+
 // ─── Tamil Nadu Districts (38) ────────────────────────────────────────────────
 export const TN_DISTRICTS = [
   'Ariyalur', 'Chengalpattu', 'Chennai', 'Coimbatore', 'Cuddalore',
@@ -32,7 +40,7 @@ export const LISTING_FEE_TIERS = [
   { label: '> ₹1Cr',      min: 10000001,  max: Infinity,  fee: 14999 },
 ]
 
-// ─── Sample Listings (used by Home, Search pages until DB is live) ─────────────
+// ─── Sample Listings (shown until MongoDB is live) ─────────────────────────
 export const LISTINGS = [
   {
     id: '1',
@@ -42,10 +50,7 @@ export const LISTINGS = [
     price: { total: 3500000, perAcre: 700000 },
     location: { district: 'Coimbatore', village: 'Sulur', state: 'Tamil Nadu' },
     photos: ['https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600'],
-    verified: true,
-    featured: true,
-    viewCount: 243,
-    createdAt: '2026-02-10',
+    verified: true, featured: true, viewCount: 243, createdAt: '2026-02-10',
   },
   {
     id: '2',
@@ -55,10 +60,7 @@ export const LISTINGS = [
     price: { total: 4800000, perAcre: 2400000 },
     location: { district: 'Madurai', village: 'Avaniyapuram', state: 'Tamil Nadu' },
     photos: ['https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=600'],
-    verified: true,
-    featured: false,
-    viewCount: 178,
-    createdAt: '2026-02-14',
+    verified: true, featured: false, viewCount: 178, createdAt: '2026-02-14',
   },
   {
     id: '3',
@@ -68,10 +70,7 @@ export const LISTINGS = [
     price: { total: 9200000, perAcre: 6133333 },
     location: { district: 'Salem', village: 'Omalur', state: 'Tamil Nadu' },
     photos: ['https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=600'],
-    verified: false,
-    featured: true,
-    viewCount: 312,
-    createdAt: '2026-02-18',
+    verified: false, featured: true, viewCount: 312, createdAt: '2026-02-18',
   },
   {
     id: '4',
@@ -81,10 +80,7 @@ export const LISTINGS = [
     price: { total: 7500000, perAcre: 750000 },
     location: { district: 'Thanjavur', village: 'Papanasam', state: 'Tamil Nadu' },
     photos: ['https://images.unsplash.com/photo-1500076656116-558758f991c1?w=600'],
-    verified: true,
-    featured: false,
-    viewCount: 95,
-    createdAt: '2026-02-20',
+    verified: true, featured: false, viewCount: 95, createdAt: '2026-02-20',
   },
   {
     id: '5',
@@ -94,10 +90,7 @@ export const LISTINGS = [
     price: { total: 2200000, perAcre: null },
     location: { district: 'Chennai', village: 'Sholinganallur', state: 'Tamil Nadu' },
     photos: ['https://images.unsplash.com/photo-1486325212027-8081e485255e?w=600'],
-    verified: true,
-    featured: true,
-    viewCount: 520,
-    createdAt: '2026-02-22',
+    verified: true, featured: true, viewCount: 520, createdAt: '2026-02-22',
   },
   {
     id: '6',
@@ -107,14 +100,12 @@ export const LISTINGS = [
     price: { total: 5500000, perAcre: null },
     location: { district: 'Tiruppur', village: 'Avinashi Road', state: 'Tamil Nadu' },
     photos: ['https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=600'],
-    verified: false,
-    featured: false,
-    viewCount: 141,
-    createdAt: '2026-02-25',
+    verified: false, featured: false, viewCount: 141, createdAt: '2026-02-25',
   },
 ]
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
+
 export function getListingFee(price = 0) {
   const p = Number(price) || 0
   if (p > 10000000) return 14999
@@ -130,10 +121,20 @@ export function formatPrice(amount) {
   return `₹${Number(amount).toLocaleString('en-IN')}`
 }
 
-export function formatArea(value, unit) {
-  if (!value) return '—'
-  const labels = { acre: 'Acres', cent: 'Cents', sqft: 'Sq.ft', gunta: 'Guntas' }
-  return `${value} ${labels[unit] || unit}`
+/**
+ * formatArea(areaObj)          → accepts { value, unit }
+ * formatArea(value, unit)      → accepts separate args
+ * e.g. formatArea({ value: 5, unit: 'acre' }) → '5 Acres'
+ */
+export function formatArea(valueOrObj, unit) {
+  const LABELS = { acre: 'Acres', cent: 'Cents', sqft: 'Sq.ft', gunta: 'Guntas' }
+  if (valueOrObj && typeof valueOrObj === 'object') {
+    const { value, unit: u } = valueOrObj
+    if (!value) return '—'
+    return `${value} ${LABELS[u] || u}`
+  }
+  if (!valueOrObj) return '—'
+  return `${valueOrObj} ${LABELS[unit] || unit || ''}`
 }
 
 export function districtLabel(district) {
