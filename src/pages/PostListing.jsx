@@ -3,9 +3,30 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle, Upload, MapPin, CreditCard, Image as ImageIcon,
   FileText, AlertCircle, ChevronRight, ChevronLeft, Loader2,
   Shield, User, Phone, IdCard, Info } from 'lucide-react'
-import { TN_DISTRICTS, LAND_TYPES, getListingFee, LISTING_FEE_TIERS, formatPrice } from '../data/listings'
+import { TN_DISTRICTS, LAND_TYPES, formatPrice } from '../data/listings'
 import { useUser, SignInButton } from '@clerk/clerk-react'
 import MapPlaceholder from '../components/MapPlaceholder'
+
+// ─── Listing fee tiers (property value → listing fee) ────────────────────────
+// < ₹25L        → ₹2,499
+// ₹25L – ₹50L   → ₹4,999
+// ₹50L – ₹1Cr   → ₹9,999
+// > ₹1Cr         → ₹14,999
+const LISTING_FEE_TIERS = [
+  { label: '< ₹25L',      fee: 2499  },
+  { label: '₹25L–₹50L',  fee: 4999  },
+  { label: '₹50L–₹1Cr',  fee: 9999  },
+  { label: '> ₹1Cr',      fee: 14999 },
+]
+
+function getListingFee(price = 0) {
+  const p = Number(price) || 0
+  if (p > 10000000) return 14999   // > 1 Cr
+  if (p >= 5000000)  return 9999   // 50L – 1Cr
+  if (p >= 2500000)  return 4999   // 25L – 50L
+  return 2499                       // < 25L
+}
+
 
 const STEPS = [
   { id: 1, label: 'Basic Info',   icon: FileText },
@@ -273,7 +294,7 @@ function Step1({ form, update }) {
       {form.totalPrice && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700 flex items-center gap-2">
           <Info size={15} className="shrink-0" />
-          Listing fee for this property: <strong>₹{getListingFee(parseFloat(form.totalPrice)).toLocaleString('en-IN')}</strong>
+          Listing fee for this property value: <strong>₹{getListingFee(parseFloat(form.totalPrice)).toLocaleString('en-IN')}</strong>
         </div>
       )}
       <div>
@@ -395,7 +416,7 @@ function Step4KYC({ form, update }) {
         </div>
         <div>
           <h2 className="font-display text-xl font-bold text-slate-800">KYC Verification</h2>
-          <p className="text-xs text-slate-500">Required before your listing goes live</p>
+          <p className="text-xs text-slate-500">Your property is approved only after KYC verification</p>
         </div>
       </div>
 
@@ -403,7 +424,7 @@ function Step4KYC({ form, update }) {
         <AlertCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
         <div className="text-xs text-amber-700 space-y-1">
           <p className="font-semibold">Why KYC?</p>
-          <p>LandHive verifies all sellers to prevent fraud and build buyer trust. Your listing will be reviewed and approved only after KYC verification (1–2 business days).</p>
+          <p>LandHive verifies all sellers to prevent fraud and build buyer trust. Your property will be approved only after KYC verification (1–2 business days).</p>
         </div>
       </div>
 
@@ -491,11 +512,11 @@ function Step5Pay({ form, update, listingFee }) {
         </div>
       </div>
 
-      {/* KYC status note */}
-      <div className="flex items-center gap-2.5 bg-blue-50 border border-blue-200 rounded-xl p-3">
-        <Shield size={16} className="text-blue-500 shrink-0" />
-        <p className="text-xs text-blue-700">
-          <strong>KYC submitted.</strong> Your listing will be reviewed after KYC verification (1–2 business days).
+      {/* KYC approval notice */}
+      <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-3">
+        <AlertCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          <strong>⚠️ Properties are approved only after KYC verification (1–2 business days)</strong> and admin review.
         </p>
       </div>
 
@@ -513,7 +534,7 @@ function Step5Pay({ form, update, listingFee }) {
         </div>
         <ul className="space-y-2 text-sm text-primary-700">
           {[
-            'Live after KYC + admin verification (24–48 hrs)',
+            'Approved only after KYC + admin verification (24–48 hrs)',
             'No hidden charges — one-time fee per listing',
             'Reach 50,000+ verified buyers in Tamil Nadu',
             'WhatsApp alerts for every buyer inquiry',

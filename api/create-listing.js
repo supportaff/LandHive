@@ -42,10 +42,14 @@ export default async function handler(req, res) {
       kycAadhaarName, kycAadhaarNumber, kycPanNumber,
     } = req.body
 
-    // Calculate listing fee
+    // ─── Listing fee tiers ───────────────────────────────────────────────────
+    // < ₹25L        → ₹2,499
+    // ₹25L – ₹50L   → ₹4,999
+    // ₹50L – ₹1Cr   → ₹9,999
+    // > ₹1Cr         → ₹14,999
     const price = parseFloat(totalPrice) || 0
     let listingFee = 2499
-    if (price >= 10000000) listingFee = 14999
+    if (price > 10000000) listingFee = 14999
     else if (price >= 5000000) listingFee = 9999
     else if (price >= 2500000) listingFee = 4999
 
@@ -80,7 +84,7 @@ export default async function handler(req, res) {
         panNumber: kycPanNumber,
         submittedAt: new Date(),
       },
-      status: 'pending', // pending | approved | rejected
+      status: 'pending', // pending | approved | rejected  — approved only after KYC
       listingFee,
       paymentStatus: 'pending', // pending | paid
       verified: false,
@@ -108,6 +112,11 @@ export default async function handler(req, res) {
             <h2 style="color: #1e293b; margin-top: 0;">Listing Submitted Successfully!</h2>
             <p style="color: #64748b;">Hi ${sellerName},</p>
             <p style="color: #64748b;">Your listing <strong style="color: #1e293b;">"${title}"</strong> has been received and is under review.</p>
+
+            <div style="background: #fefce8; border: 1px solid #fde047; border-radius: 12px; padding: 16px; margin: 16px 0;">
+              <p style="margin: 0; color: #854d0e; font-weight: 600;">⚠️ Important</p>
+              <p style="margin: 8px 0 0; color: #92400e;">Your property will be <strong>approved only after KYC verification</strong> (1–2 business days).</p>
+            </div>
             
             <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin: 16px 0;">
               <p style="margin: 0; color: #15803d; font-weight: 600;">📋 Listing Details</p>
@@ -117,11 +126,11 @@ export default async function handler(req, res) {
               <p style="margin: 4px 0 0; color: #166534;">Listing Fee: ₹${listingFee.toLocaleString('en-IN')}</p>
             </div>
 
-            <div style="background: #fefce8; border: 1px solid #fde047; border-radius: 12px; padding: 16px; margin: 16px 0;">
-              <p style="margin: 0; color: #854d0e; font-weight: 600;">⏳ Next Steps</p>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin: 16px 0;">
+              <p style="margin: 0; color: #15803d; font-weight: 600;">⏳ Next Steps</p>
               <p style="margin: 8px 0 0; color: #92400e;">1. KYC verification in progress (1–2 business days)</p>
               <p style="margin: 4px 0 0; color: #92400e;">2. Listing review by admin team</p>
-              <p style="margin: 4px 0 0; color: #92400e;">3. Live on LandHive within 24–48 hours after approval</p>
+              <p style="margin: 4px 0 0; color: #92400e;">3. Live on LandHive within 24–48 hours after KYC approval</p>
               <p style="margin: 4px 0 0; color: #92400e;">4. WhatsApp alerts for every buyer inquiry</p>
             </div>
 
@@ -143,6 +152,7 @@ export default async function handler(req, res) {
           <li><strong>Seller:</strong> ${sellerName} (${sellerPhone})</li>
           <li><strong>District:</strong> ${district}</li>
           <li><strong>Price:</strong> ₹${(price / 100000).toFixed(1)}L</li>
+          <li><strong>Listing Fee:</strong> ₹${listingFee.toLocaleString('en-IN')}</li>
           <li><strong>KYC Name:</strong> ${kycAadhaarName}</li>
           <li><strong>Listing ID:</strong> ${result.insertedId}</li>
         </ul>
@@ -154,7 +164,7 @@ export default async function handler(req, res) {
       success: true,
       listingId: result.insertedId.toString(),
       listingFee,
-      message: 'Listing submitted for review',
+      message: 'Listing submitted for review — will be approved after KYC verification',
     })
   } catch (error) {
     console.error('Create listing error:', error)
