@@ -1,0 +1,30 @@
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,DELETE,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+      ]
+    }
+  ],
+  "env": {
+    "MONGODB_URI":            "@mongodb_uri",
+    "RESEND_API_KEY":         "@resend_api_key",
+    "CLERK_SECRET_KEY":       "@lh_clerk_secret_key",
+    "RESEND_FROM_EMAIL":      "hello@landhive.in",
+    "PAYU_MERCHANT_SALT":     "@payu_merchant_salt",
+    "VITE_APP_URL":           "https://landhive.in"
+  },
+  "build": {
+    "env": {
+      "VITE_CLERK_PUBLISHABLE_KEY": "@next_public_lh_clerk_publishable_key",
+      "VITE_GOOGLE_MAPS_API_KEY":   "@vite_google_maps_api_key"
+    }
+  }
+}
