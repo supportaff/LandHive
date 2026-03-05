@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader } from '@googlemaps/js-api-loader'
-import { MapPin } from 'lucide-react'
+import { MapPin, AlertCircle } from 'lucide-react'
 
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 
-// @googlemaps/js-api-loader is a singleton internally — safe to instantiate per component
-function makeLoader() {
+let _loaderInstance = null
+function getLoader() {
   if (!MAPS_KEY || MAPS_KEY === 'your_google_maps_api_key') return null
-  return new Loader({
-    apiKey: MAPS_KEY,
-    version: 'weekly',
-    libraries: ['places'],
-  })
+  if (!_loaderInstance) {
+    _loaderInstance = new Loader({
+      apiKey: MAPS_KEY,
+      version: 'weekly',
+      libraries: ['places'],
+    })
+  }
+  return _loaderInstance
 }
 
 const PIN_PATH =
@@ -28,20 +31,27 @@ export default function GoogleMapView({
   center = null,
 }) {
   const containerRef = useRef(null)
-  const mapRef = useRef(null)
-  const markersRef = useRef([])
-  const iwRef = useRef(null)
-  const [status, setStatus] = useState('loading') // loading | ready | error
+  const mapRef       = useRef(null)
+  const markersRef   = useRef([])
+  const iwRef        = useRef(null)
+  const [status, setStatus] = useState('loading') // loading | ready | error | no-key
   const [errMsg, setErrMsg] = useState('')
 
-  /* ---- 1. Load Google Maps ---- */
+  // Suppress Google's ugly built-in error banner
   useEffect(() => {
-    const loader = makeLoader()
+    const suppress = () => {
+      const banners = document.querySelectorAll('.dismissButton, [class*="gm-err"]')
+      banners.forEach(el => { el.style.display = 'none' })
+    }
+    const t = setInterval(suppress, 300)
+    return () => clearInterval(t)
+  }, [])
+
+  /* ── 1. Load Google Maps ── */
+  useEffect(() => {
+    const loader = getLoader()
     if (!loader) {
-      setStatus('error')
-      setErrMsg(
-        'VITE_GOOGLE_MAPS_API_KEY is not set.\nGo to Vercel → Project → Settings → Environment Variables and add VITE_GOOGLE_MAPS_API_KEY, then redeploy.'
-      )
+      setStatus('no-key')
       return
     }
     loader
@@ -49,11 +59,11 @@ export default function GoogleMapView({
       .then(() => setStatus('ready'))
       .catch(e => {
         setStatus('error')
-        setErrMsg('Google Maps failed to load: ' + (e?.message || 'Check your API key and enabled APIs.'))
+        setErrMsg(e?.message || 'Maps failed to load. Check API key & enabled APIs.')
       })
   }, [])
 
-  /* ---- 2. Init map once ready ---- */
+  /* ── 2. Init map once ready ── */
   useEffect(() => {
     if (status !== 'ready' || !containerRef.current || mapRef.current) return
     const G = window.google.maps
@@ -62,7 +72,7 @@ export default function GoogleMapView({
       ? { lat: center.lat, lng: center.lng }
       : singleMarker
       ? { lat: singleMarker.lat, lng: singleMarker.lng }
-      : { lat: 11.1271, lng: 78.6569 } // Tamil Nadu
+      : { lat: 11.1271, lng: 78.6569 }
 
     mapRef.current = new G.Map(containerRef.current, {
       center: initCenter,
@@ -74,14 +84,12 @@ export default function GoogleMapView({
       clickableIcons: false,
       styles: [
         { featureType: 'poi.business', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-        { featureType: 'poi.park', elementType: 'labels.text', stylers: [{ visibility: 'off' }] },
         { featureType: 'transit', stylers: [{ visibility: 'simplified' }] },
       ],
     })
 
     iwRef.current = new G.InfoWindow({ maxWidth: 210 })
 
-    // Single pin (listing detail)
     if (singleMarker) {
       const pin = new G.Marker({
         position: { lat: singleMarker.lat, lng: singleMarker.lng },
@@ -105,7 +113,6 @@ export default function GoogleMapView({
       }
     }
 
-    // Picker mode (post listing)
     if (mode === 'picker' && onMapClick) {
       mapRef.current.addListener('click', e =>
         onMapClick({ lat: e.latLng.lat(), lng: e.latLng.lng() })
@@ -113,32 +120,27 @@ export default function GoogleMapView({
     }
   }, [status])
 
-  /* ---- 3. Pan to new center ---- */
+  /* ── 3. Pan to new center ── */
   useEffect(() => {
     if (!mapRef.current || !center) return
     mapRef.current.panTo({ lat: center.lat, lng: center.lng })
     mapRef.current.setZoom(12)
   }, [center?.lat, center?.lng])
 
-  /* ---- 4. Render listing markers ---- */
+  /* ── 4. Render listing markers ── */
   useEffect(() => {
     if (status !== 'ready' || !mapRef.current || singleMarker) return
     const G = window.google.maps
-
     markersRef.current.forEach(m => m.setMap(null))
     markersRef.current = []
-
     const bounds = new G.LatLngBounds()
-    const valid = listings.filter(l => l.location?.lat && l.location?.lng)
-
+    const valid  = listings.filter(l => l.location?.lat && l.location?.lng)
     valid.forEach((listing, idx) => {
       const pos = { lat: listing.location.lat, lng: listing.location.lng }
       bounds.extend(pos)
-
       const p = listing.price.total
       const priceLabel = p >= 1e7 ? `\u20B9${(p / 1e7).toFixed(1)}Cr` : `\u20B9${(p / 1e5).toFixed(0)}L`
       const isSel = listing.id === selectedId
-
       const marker = new G.Marker({
         position: pos,
         map: mapRef.current,
@@ -155,7 +157,6 @@ export default function GoogleMapView({
         },
         zIndex: isSel ? 999 : idx,
       })
-
       marker.addListener('click', () => {
         if (onMarkerClick) onMarkerClick(listing)
         const imgHtml = listing.photos?.[0]
@@ -165,36 +166,28 @@ export default function GoogleMapView({
           <div style="font-family:system-ui,sans-serif;max-width:195px;overflow:hidden">
             ${imgHtml}
             <div style="padding:10px">
-              <p style="margin:0 0 3px;font-weight:600;font-size:12px;color:#1e293b;line-height:1.35">${listing.title}</p>
+              <p style="margin:0 0 3px;font-weight:600;font-size:12px;color:#1e293b">${listing.title}</p>
               <p style="margin:0 0 8px;color:#16a34a;font-weight:700;font-size:14px">${priceLabel}</p>
-              <a href="/listing/${listing.id}" style="display:block;background:#16a34a;color:#fff;text-align:center;padding:7px;border-radius:7px;text-decoration:none;font-size:12px;font-weight:600">
-                View Details &#8594;
-              </a>
+              <a href="/listing/${listing.id}" style="display:block;background:#16a34a;color:#fff;text-align:center;padding:7px;border-radius:7px;text-decoration:none;font-size:12px;font-weight:600">View Details &#8594;</a>
             </div>
           </div>`)
         iwRef.current.open(mapRef.current, marker)
       })
-
       markersRef.current.push(marker)
     })
-
     if (!center) {
       if (valid.length > 1) mapRef.current.fitBounds(bounds, { padding: 60 })
-      else if (valid.length === 1) {
-        mapRef.current.setCenter(bounds.getCenter())
-        mapRef.current.setZoom(13)
-      }
+      else if (valid.length === 1) { mapRef.current.setCenter(bounds.getCenter()); mapRef.current.setZoom(13) }
     }
   }, [status, listings])
 
-  /* ---- 5. Update selected marker style ---- */
+  /* ── 5. Update selected marker style ── */
   useEffect(() => {
     if (status !== 'ready' || !mapRef.current) return
     const G = window.google.maps
     const valid = listings.filter(l => l.location?.lat && l.location?.lng)
     markersRef.current.forEach((m, i) => {
-      const l = valid[i]
-      if (!l) return
+      const l = valid[i]; if (!l) return
       const isSel = l.id === selectedId
       m.setIcon({
         path: PIN_PATH,
@@ -210,28 +203,43 @@ export default function GoogleMapView({
     })
   }, [selectedId])
 
-  /* ---- Render states ---- */
-  if (status === 'error')
+  /* ── Fallback UI ── */
+  if (status === 'no-key' || status === 'error') {
     return (
       <div
-        className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-green-50"
+        className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-green-50 border border-slate-100"
         style={{ height }}>
         <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-3 shadow border border-slate-100">
           <MapPin size={24} className="text-primary-400" />
         </div>
-        <p className="text-slate-600 font-semibold text-sm text-center px-6 max-w-xs whitespace-pre-line">{errMsg}</p>
+        <p className="text-slate-700 font-semibold text-sm mb-1">
+          {status === 'no-key' ? 'Map unavailable' : 'Map failed to load'}
+        </p>
+        {status === 'error' && (
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 max-w-xs mx-4">
+            <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700">{errMsg}</p>
+          </div>
+        )}
+        {status === 'no-key' && (
+          <p className="text-xs text-slate-400 mt-1 text-center px-6">
+            Add <code className="bg-slate-100 px-1 rounded">VITE_GOOGLE_MAPS_API_KEY</code> in Vercel env vars
+          </p>
+        )}
       </div>
     )
+  }
 
-  if (status === 'loading')
+  if (status === 'loading') {
     return (
       <div className="w-full flex items-center justify-center bg-slate-100" style={{ height }}>
         <div className="text-center">
           <div className="w-8 h-8 border-[3px] border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-          <p className="text-slate-400 text-xs font-medium">Loading Google Maps&hellip;</p>
+          <p className="text-slate-400 text-xs font-medium">Loading map&hellip;</p>
         </div>
       </div>
     )
+  }
 
   return <div ref={containerRef} className="w-full" style={{ height }} />
 }
