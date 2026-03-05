@@ -1,17 +1,9 @@
 // api/payu-webhook.js — POST /api/payu-webhook
-// PayU IPN (Instant Payment Notification) — called server-to-server by PayU
-//
-// Env vars:
-//   LH_PAYU_KEY   — PayU merchant key
-//   LH_PAYU_SALT  — PayU merchant salt
-//   LH_PAYU_ENV   — "true" = live | "false" = test
-
+// PayU IPN handler — called server-to-server by PayU after every payment
 import crypto from 'crypto'
 import { ObjectId } from 'mongodb'
-import { Resend } from 'resend'
 import { getDb } from './lib/db.js'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
+import { mail } from './lib/mailer.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -37,7 +29,7 @@ export default async function handler(req, res) {
       hash: responseHash,
     } = body
 
-    // ── Verify PayU reverse hash ───────────────────────────────────────────
+    // ── Verify PayU reverse hash ─────────────────────────────────────────────
     // SALT|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|KEY
     const reverseStr = [
       SALT, status,
@@ -51,13 +43,13 @@ export default async function handler(req, res) {
     const hashValid    = (computedHash === responseHash)
 
     if (!hashValid) {
-      console.warn(`PayU webhook: hash mismatch for txnid=${txnid}. Possible tamper.`)
+      console.warn(`[webhook] Hash mismatch for txnid=${txnid} — possible tamper attempt`)
     }
 
     const db  = await getDb()
     const now = new Date()
 
-    // ── Update payment record ─────────────────────────────────────────────
+    // ── Update payment record ────────────────────────────────────────────────
     await db.collection('payments').updateOne(
       { txnid },
       {
@@ -82,10 +74,9 @@ export default async function handler(req, res) {
       }
     )
 
-    // ── SUCCESS: unlock listing + notify ─────────────────────────────────
+    // ── SUCCESS ──────────────────────────────────────────────────────────────
     if (status === 'success' && hashValid && udf1) {
       try {
-        // Update listing: mark payment as paid, move to pending_kyc
         await db.collection('listings').updateOne(
           { _id: new ObjectId(udf1) },
           {
@@ -102,105 +93,36 @@ export default async function handler(req, res) {
           }
         )
 
-        // Increment totalPaid on user profile
         if (udf2) {
           await db.collection('users').updateOne(
             { clerkId: udf2 },
-            {
-              $inc: { totalPaid: parseFloat(amount) },
-              $set: { updatedAt: now },
-            }
+            { $inc: { totalPaid: parseFloat(amount) }, $set: { updatedAt: now } }
           )
         }
 
-        // ── Payment receipt email to seller ──────────────────────────────
-        await resend.emails.send({
-          from: `LandHive <${process.env.RESEND_FROM_EMAIL || 'hello@landhive.in'}>`,
-          to:   [email],
-          subject: `\u2705 Payment Confirmed \u2014 \u20B9${parseFloat(amount).toLocaleString('en-IN')} received`,
-          html: `
-            <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
-              <div style="background:#16a34a;padding:24px;border-radius:16px 16px 0 0;text-align:center">
-                <h1 style="color:white;margin:0">LandHive \uD83C\uDF3F</h1>
-                ${!isLive ? '<p style="color:#fde047;margin:6px 0 0;font-size:12px">[TEST MODE]</p>' : ''}
-              </div>
-              <div style="background:white;border:1px solid #e2e8f0;padding:32px;border-radius:0 0 16px 16px">
-                <h2 style="color:#15803d;margin-top:0">\u2705 Payment Successful!</h2>
-                <p style="color:#64748b">Hi ${firstname},</p>
-                <p style="color:#64748b">We received your listing fee of
-                  <strong style="color:#1e293b">\u20B9${parseFloat(amount).toLocaleString('en-IN')}</strong>.
-                </p>
-                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;margin:20px 0">
-                  <p style="margin:0 0 12px;font-weight:700;color:#15803d">\uD83D\uDCCB Payment Receipt</p>
-                  <table style="width:100%;font-size:13px;color:#374151;border-collapse:collapse">
-                    <tr><td style="padding:5px 0;color:#6b7280">Transaction ID</td>
-                        <td style="text-align:right;font-weight:600">${txnid}</td></tr>
-                    <tr><td style="padding:5px 0;color:#6b7280">PayU Payment ID</td>
-                        <td style="text-align:right;font-weight:600">${mihpayid}</td></tr>
-                    <tr><td style="padding:5px 0;color:#6b7280">Amount Paid</td>
-                        <td style="text-align:right;font-weight:700;color:#15803d">\u20B9${parseFloat(amount).toLocaleString('en-IN')}</td></tr>
-                    <tr><td style="padding:5px 0;color:#6b7280">Payment Mode</td>
-                        <td style="text-align:right">${paymentMode || 'Online'}</td></tr>
-                    ${bank_ref_num
-                      ? `<tr><td style="padding:5px 0;color:#6b7280">Bank Ref No.</td>
-                             <td style="text-align:right">${bank_ref_num}</td></tr>`
-                      : ''}
-                    <tr><td style="padding:5px 0;color:#6b7280">Listing Ref</td>
-                        <td style="text-align:right;font-size:11px">${udf1}</td></tr>
-                    <tr><td style="padding:5px 0;color:#6b7280">Environment</td>
-                        <td style="text-align:right">${isLive ? 'Live' : 'Test'}</td></tr>
-                  </table>
-                </div>
-                <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:16px">
-                  <p style="margin:0;color:#92400e">
-                    \u23F3 Your listing will go <strong>live within 24\u201348 hours</strong> after KYC verification.
-                  </p>
-                </div>
-                <p style="color:#64748b;font-size:13px;margin-top:20px">
-                  Keep this email as your payment receipt.
-                  Questions? <a href="mailto:hello@landhive.in" style="color:#16a34a">hello@landhive.in</a>
-                </p>
-              </div>
-            </div>`,
-        }).catch(e => console.error('Receipt email failed:', e))
-
-        // Admin notification
-        await resend.emails.send({
-          from: `LandHive System <${process.env.RESEND_FROM_EMAIL || 'hello@landhive.in'}>`,
-          to:   ['admin@landhive.in'],
-          subject: `[Admin]${!isLive ? ' [TEST]' : ''} Payment \u20B9${amount} — Listing ${udf1} → pending KYC`,
-          html: `
-            <p>Payment confirmed${!isLive ? ' <strong>(TEST MODE)</strong>' : ''}:</p>
-            <ul>
-              <li><strong>Txn ID:</strong> ${txnid}</li>
-              <li><strong>PayU ID:</strong> ${mihpayid}</li>
-              <li><strong>Amount:</strong> \u20B9${amount}</li>
-              <li><strong>Seller:</strong> ${firstname} (${email})</li>
-              <li><strong>Listing ID:</strong> ${udf1}</li>
-              <li><strong>Mode:</strong> ${paymentMode || 'N/A'}</li>
-              ${bank_ref_num ? `<li><strong>Bank Ref:</strong> ${bank_ref_num}</li>` : ''}
-              <li><strong>Hash Valid:</strong> ${hashValid}</li>
-              <li><strong>Environment:</strong> ${isLive ? 'LIVE' : 'TEST'}</li>
-            </ul>
-            <p><a href="https://landhive.in/admin">Review KYC in Admin Panel \u2192</a></p>`,
-        }).catch(e => console.error('Admin email failed:', e))
-
+        // Fire both emails in parallel, non-blocking
+        await Promise.allSettled([
+          mail.paymentConfirmed(email, {
+            name: firstname, amount, txnid, mihpayid,
+            paymentMode, bankRefNum: bank_ref_num,
+            listingId: udf1, isLive,
+          }),
+          mail.adminPayment({
+            txnid, mihpayid, amount, firstname, email,
+            listingId: udf1, paymentMode,
+            bankRefNum: bank_ref_num, hashValid, isLive,
+          }),
+        ])
       } catch (updateErr) {
         console.error('Post-payment update error:', updateErr)
       }
     }
 
-    // ── FAILURE: reset listing to pending ─────────────────────────────────
+    // ── FAILURE ──────────────────────────────────────────────────────────────
     if (status === 'failure' && udf1) {
       await db.collection('listings').updateOne(
         { _id: new ObjectId(udf1) },
-        {
-          $set: {
-            'payment.status': 'failed',
-            status:           'pending',
-            updatedAt:        now,
-          },
-        }
+        { $set: { 'payment.status': 'failed', status: 'pending', updatedAt: now } }
       ).catch(e => console.error('Listing failure update error:', e))
     }
 
