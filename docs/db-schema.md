@@ -86,6 +86,7 @@ Full PayU transaction record — every payment attempt is stored.
   "phone": "9876543210",
   "amount": 2499,
   "currency": "INR",
+  "mode": "live | test",
   "status": "initiated | success | failure | pending",
   "udf1": "listingId",
   "udf2": "clerkUserId",
@@ -151,16 +152,45 @@ Buyer inquiries sent to sellers.
 
 ---
 
-## Environment Variables Required
+## Environment Variables
 
-| Variable | Purpose |
-|---|---|
-| `LH_MONGODB_URI` | MongoDB Atlas connection string |
-| `CLERK_SECRET_KEY` | Clerk backend auth |
-| `RESEND_API_KEY` | Email via Resend |
-| `RESEND_FROM_EMAIL` | Sender email (`hello@landhive.in`) |
-| `PAYU_MERCHANT_KEY` | PayU merchant key |
-| `PAYU_MERCHANT_SALT` | PayU salt for hash generation |
-| `APP_URL` | App base URL (`https://landhive.in`) |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk frontend key |
-| `VITE_GOOGLE_MAPS_API_KEY` | Google Maps |
+| Variable | Value | Purpose |
+|---|---|---|
+| `LH_MONGODB_URI` | `mongodb+srv://...` | MongoDB Atlas connection |
+| `CLERK_SECRET_KEY` | `sk_live_...` | Clerk backend auth |
+| `RESEND_API_KEY` | `re_...` | Email via Resend |
+| `RESEND_FROM_EMAIL` | `hello@landhive.in` | Sender email |
+| `LH_PAYU_KEY` | from PayU dashboard | PayU merchant key |
+| `LH_PAYU_SALT` | from PayU dashboard | PayU salt for hash |
+| `LH_PAYU_ENV` | `false` = test / `true` = live | Switches PayU endpoint |
+| `APP_URL` | `https://landhive.in` | Base URL for payment redirects |
+| `VITE_CLERK_PUBLISHABLE_KEY` | `pk_live_...` | Clerk frontend key |
+| `VITE_GOOGLE_MAPS_API_KEY` | `AIza...` | Google Maps |
+
+---
+
+## PayU Webhook URL (set in PayU Dashboard)
+
+```
+https://land-hive.vercel.app/api/payu-webhook
+```
+
+## PayU Flow
+
+```
+PostListing → POST /api/payu-initiate
+             ↓ returns { txnid, hash, key, action }
+             ↓ frontend POSTs form to action URL (test.payu.in or secure.payu.in)
+             ↓ user pays
+             ↓ PayU calls /api/payu-webhook (server-to-server)
+             ↓ webhook verifies hash, updates listings + payments collections
+             ↓ sends receipt email to seller
+             ↓ redirects user to /payment/success or /payment/failure
+```
+
+## Listing Status Flow
+
+```
+pending → awaiting_payment → pending_kyc → approved
+                                          └─ rejected
+```
