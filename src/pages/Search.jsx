@@ -1,17 +1,24 @@
 import { useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { MapPin, SlidersHorizontal, X, BadgeCheck, LayoutList, Map } from 'lucide-react'
+import { MapPin, SlidersHorizontal, X, BadgeCheck, LayoutList, Map, Navigation } from 'lucide-react'
 import GoogleMapView from '../components/GoogleMapView'
 import { LISTINGS, STATES, LAND_TYPES, formatPrice, formatArea } from '../data/listings'
 
 export default function Search() {
   const [searchParams] = useSearchParams()
+
+  // Map center from URL (set by homepage location search)
+  const urlLat      = searchParams.get('lat')
+  const urlLng      = searchParams.get('lng')
+  const urlLocation = searchParams.get('location')
+  const mapCenter   = urlLat && urlLng ? { lat: parseFloat(urlLat), lng: parseFloat(urlLng) } : null
+
   const [filters, setFilters] = useState({
-    state: searchParams.get('state') || '',
-    district: '',
-    landType: searchParams.get('landType') || '',
-    minPrice: '',
-    maxPrice: searchParams.get('maxPrice') || '',
+    state:        searchParams.get('state')    || '',
+    district:     searchParams.get('district') || '',
+    landType:     searchParams.get('landType') || '',
+    minPrice:     '',
+    maxPrice:     searchParams.get('maxPrice') || '',
     verifiedOnly: false,
   })
   const [selectedId, setSelectedId] = useState(null)
@@ -19,17 +26,17 @@ export default function Search() {
   const [showFilters, setShowFilters] = useState(false)
 
   const filtered = LISTINGS.filter(l => {
-    if (filters.state && l.location.state !== filters.state) return false
+    if (filters.state    && l.location.state    !== filters.state)                                        return false
     if (filters.district && !l.location.district.toLowerCase().includes(filters.district.toLowerCase())) return false
-    if (filters.landType && l.landType !== filters.landType) return false
-    if (filters.verifiedOnly && !l.verified) return false
-    if (filters.minPrice && l.price.total < Number(filters.minPrice) * 100000) return false
-    if (filters.maxPrice && l.price.total > Number(filters.maxPrice) * 100000) return false
+    if (filters.landType && l.landType          !== filters.landType)                                     return false
+    if (filters.verifiedOnly && !l.verified)                                                              return false
+    if (filters.minPrice && l.price.total < Number(filters.minPrice) * 100000)                           return false
+    if (filters.maxPrice && l.price.total > Number(filters.maxPrice) * 100000)                           return false
     return true
   })
 
   const update = (k, v) => setFilters(f => ({ ...f, [k]: v }))
-  const clear = () => setFilters({ state: '', district: '', landType: '', minPrice: '', maxPrice: '', verifiedOnly: false })
+  const clear  = () => setFilters({ state: '', district: '', landType: '', minPrice: '', maxPrice: '', verifiedOnly: false })
   const activeCount = Object.values(filters).filter(v => v && v !== false).length
 
   const FiltersUI = () => (
@@ -48,6 +55,15 @@ export default function Search() {
           </button>
         )}
       </div>
+
+      {/* Location context badge */}
+      {urlLocation && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 rounded-xl text-xs text-primary-700 font-medium">
+          <Navigation size={12} className="text-primary-500 shrink-0" />
+          <span className="truncate">Near: {urlLocation}</span>
+        </div>
+      )}
+
       <div>
         <label className="label">State</label>
         <select value={filters.state} onChange={e => update('state', e.target.value)} className="input text-sm">
@@ -83,7 +99,7 @@ export default function Search() {
         <input type="checkbox" id="ver" checked={filters.verifiedOnly}
           onChange={e => update('verifiedOnly', e.target.checked)} className="w-4 h-4 accent-primary-600" />
         <label htmlFor="ver" className="text-xs font-semibold text-primary-700 cursor-pointer flex items-center gap-1.5">
-          <BadgeCheck size={13} className="text-primary-600" /> Verified Listings Only
+          <BadgeCheck size={13} className="text-primary-600" /> Verified Only
         </label>
       </div>
     </div>
@@ -96,40 +112,42 @@ export default function Search() {
       <div className="md:hidden flex items-center justify-between px-3 py-2.5 bg-white border-b border-slate-100 shadow-sm shrink-0">
         <span className="text-sm font-bold text-slate-700">{filtered.length} listings</span>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowFilters(v => !v)}
+          <button
+            onClick={() => setShowFilters(v => !v)}
             className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all
               ${showFilters ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-slate-700 border-slate-200'}`}>
             <SlidersHorizontal size={12} /> Filters {activeCount > 0 && `(${activeCount})`}
           </button>
           <div className="flex rounded-lg overflow-hidden border border-slate-200">
-            <button onClick={() => setMobileView('list')}
+            <button
+              onClick={() => setMobileView('list')}
               className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-all
-                ${mobileView === 'list' ? 'bg-primary-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                ${mobileView === 'list' ? 'bg-primary-600 text-white' : 'bg-white text-slate-600'}`}>
               <LayoutList size={13} /> List
             </button>
-            <button onClick={() => setMobileView('map')}
+            <button
+              onClick={() => setMobileView('map')}
               className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-all
-                ${mobileView === 'map' ? 'bg-primary-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                ${mobileView === 'map' ? 'bg-primary-600 text-white' : 'bg-white text-slate-600'}`}>
               <Map size={13} /> Map
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile filter panel */}
+      {/* Mobile filter drawer */}
       {showFilters && (
         <div className="md:hidden bg-white border-b border-slate-200 shadow-lg z-30 shrink-0 overflow-y-auto max-h-[60vh]">
           <FiltersUI />
         </div>
       )}
 
-      {/* Content area */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* LEFT: Desktop filters + listing cards */}
+        {/* LEFT: filters + cards */}
         <div className={`
           md:w-[340px] md:shrink-0 md:flex md:flex-col md:border-r md:border-slate-100 md:bg-white md:overflow-hidden
-          ${ mobileView === 'list' ? 'flex flex-col w-full' : 'hidden' }
+          ${mobileView === 'list' ? 'flex flex-col w-full' : 'hidden'}
         `}>
           <div className="hidden md:block border-b border-slate-100 overflow-y-auto">
             <FiltersUI />
@@ -151,10 +169,7 @@ export default function Search() {
                     key={l.id}
                     listing={l}
                     isSelected={l.id === selectedId}
-                    onClick={() => {
-                      setSelectedId(l.id === selectedId ? null : l.id)
-                      setMobileView('map')
-                    }}
+                    onClick={() => { setSelectedId(l.id === selectedId ? null : l.id); setMobileView('map') }}
                   />
                 ))}
               </div>
@@ -162,10 +177,10 @@ export default function Search() {
           </div>
         </div>
 
-        {/* RIGHT: Map */}
+        {/* RIGHT: Google Map */}
         <div className={`
           flex-1 relative
-          ${ mobileView === 'map' ? 'flex flex-col w-full' : 'hidden md:block' }
+          ${mobileView === 'map' ? 'flex flex-col w-full' : 'hidden md:block'}
         `}>
           <div className="absolute top-3 left-3 z-10 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow border border-slate-100 pointer-events-none">
             <span className="text-xs font-bold text-slate-700">{filtered.length} on map</span>
@@ -176,6 +191,7 @@ export default function Search() {
             selectedId={selectedId}
             onMarkerClick={l => setSelectedId(l.id === selectedId ? null : l.id)}
             height="100%"
+            center={mapCenter}
           />
 
           {/* Selected listing bottom card */}
@@ -185,7 +201,8 @@ export default function Search() {
             return (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 w-[min(340px,calc(100vw-24px))]">
                 <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden relative">
-                  <button onClick={() => setSelectedId(null)}
+                  <button
+                    onClick={() => setSelectedId(null)}
                     className="absolute top-2 right-2 z-10 w-6 h-6 bg-black/20 hover:bg-black/30 rounded-full flex items-center justify-center transition-colors">
                     <X size={12} className="text-white" />
                   </button>
@@ -200,7 +217,8 @@ export default function Search() {
                       </div>
                       <div className="flex items-center justify-between mt-2 gap-2">
                         <span className="font-bold text-primary-600 text-sm">{formatPrice(l.price.total)}</span>
-                        <Link to={`/listing/${l.id}`}
+                        <Link
+                          to={`/listing/${l.id}`}
                           className="text-xs bg-primary-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-primary-700 transition-colors shrink-0">
                           View &#8594;
                         </Link>
@@ -219,9 +237,9 @@ export default function Search() {
 
 function MiniCard({ listing, isSelected, onClick }) {
   return (
-    <div onClick={onClick}
-      className={`p-3 cursor-pointer transition-all duration-150 active:bg-slate-100
-        ${ isSelected ? 'bg-primary-50' : 'hover:bg-slate-50' }`}
+    <div
+      onClick={onClick}
+      className={`p-3 cursor-pointer transition-all duration-150 active:bg-slate-100 ${isSelected ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
       style={{ borderLeft: `3px solid ${isSelected ? '#16a34a' : 'transparent'}` }}>
       <div className="flex gap-3">
         <div className="relative shrink-0">
