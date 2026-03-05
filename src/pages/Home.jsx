@@ -54,20 +54,11 @@ export default function Home() {
   return (
     <div className="overflow-x-hidden">
 
-      {/* Coming-soon banner */}
-      <div className="fixed top-0 inset-x-0 z-[60] bg-amber-500 py-1.5 text-center">
-        <p className="text-xs sm:text-sm font-semibold text-amber-950">
-          &#127759; Currently serving <strong>Tamil Nadu</strong> &mdash; More states coming soon!
-        </p>
-      </div>
-
       {/* ===== HERO ===== */}
       <section
         className="relative min-h-screen flex items-center"
-        style={{
-          background: 'linear-gradient(135deg,#14532d 0%,#15803d 40%,#166534 70%,#1a3a2a 100%)',
-          paddingTop: '28px',
-        }}>
+        style={{ background: 'linear-gradient(135deg,#14532d 0%,#15803d 40%,#166534 70%,#1a3a2a 100%)' }}>
+
         {/* Decorative blobs */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-primary-500/10 rounded-full blur-3xl" />
@@ -75,19 +66,21 @@ export default function Home() {
           <div
             className="absolute inset-0 opacity-40"
             style={{
-              backgroundImage:
-                'radial-gradient(circle at 1px 1px,rgba(255,255,255,0.05) 1px,transparent 0)',
+              backgroundImage: 'radial-gradient(circle at 1px 1px,rgba(255,255,255,0.05) 1px,transparent 0)',
               backgroundSize: '40px 40px',
             }}
           />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-40 pb-32">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-36 pb-32">
           <div className="max-w-3xl">
-            {/* Pill */}
+
+            {/* Status pill — Tamil Nadu live + coming soon */}
             <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 text-white/90 text-sm px-4 py-2 rounded-full mb-6">
               <MapPinned size={14} className="text-amber-400" />
               Tamil Nadu&apos;s #1 Land Marketplace
+              <span className="w-px h-3.5 bg-white/20" />
+              <span className="text-[11px] text-white/60">More states coming soon</span>
               <ChevronRight size={14} />
             </div>
 
@@ -107,8 +100,6 @@ export default function Home() {
 
             {/* ===== SEARCH BOX ===== */}
             <div className="bg-white rounded-2xl shadow-2xl p-3 flex flex-col md:flex-row gap-3">
-
-              {/* Location autocomplete */}
               <LocationSearch
                 value={locationText}
                 onChange={e => { setLocationText(e.target.value); setSelectedLocation(null) }}
@@ -116,8 +107,6 @@ export default function Home() {
                 placeholder="&#128205; Search location (e.g. Coimbatore, Salem…)"
                 inputClassName="flex-1"
               />
-
-              {/* Land type */}
               <select
                 value={landType}
                 onChange={e => setLandType(e.target.value)}
@@ -127,8 +116,6 @@ export default function Home() {
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
               </select>
-
-              {/* Budget */}
               <input
                 type="text"
                 placeholder="&#128176; Max Budget (e.g. 50L)"
@@ -137,7 +124,6 @@ export default function Home() {
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
-
               <button
                 onClick={handleSearch}
                 className="bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl flex items-center gap-2 transition-all shrink-0 shadow-lg hover:shadow-primary-600/30 active:scale-95">
@@ -284,11 +270,7 @@ export default function Home() {
                   '&#9989; 24&#8211;48hr approval',
                   '&#9989; Admin verified',
                 ].map((item, i) => (
-                  <span
-                    key={i}
-                    className="text-white/90 text-sm"
-                    dangerouslySetInnerHTML={{ __html: item }}
-                  />
+                  <span key={i} className="text-white/90 text-sm" dangerouslySetInnerHTML={{ __html: item }} />
                 ))}
               </div>
             </div>
@@ -310,9 +292,9 @@ export default function Home() {
           <h2 className="section-title text-center mb-10">What Our Users Say</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
-              { name: 'Suresh Babu',     role: 'Buyer, Coimbatore', text: 'Found my dream farm land through LandHive. The verification badges gave me complete confidence. Patta and EC documents were all clear!',                                              stars: 5, avatar: '\uD83D\uDC68\u200D\uD83C\uDF3E' },
-              { name: 'Anita Krishnan',  role: 'Seller, Salem',     text: 'Posted my 5 acre plot and got 12 genuine inquiries in the first week. Worth every rupee. Very smooth process and great dashboard.',                                                     stars: 5, avatar: '\uD83D\uDC69\u200D\uD83D\uDCBC' },
-              { name: 'Gopal Sundaram', role: 'Buyer, Chennai',     text: 'The Google Maps feature is brilliant \u2014 I could see all listings near Trichy with one glance. Clicked a pin, saw the price, then viewed the full listing. Saved so much time.', stars: 5, avatar: '\uD83D\uDC68\u200D\uD83D\uDCBB' },
+              { name: 'Suresh Babu',    role: 'Buyer, Coimbatore', text: 'Found my dream farm land through LandHive. The verification badges gave me complete confidence. Patta and EC documents were all clear!', stars: 5, avatar: '\uD83D\uDC68\u200D\uD83C\uDF3E' },
+              { name: 'Anita Krishnan', role: 'Seller, Salem',     text: 'Posted my 5 acre plot and got 12 genuine inquiries in the first week. Worth every rupee. Very smooth process and great dashboard.',    stars: 5, avatar: '\uD83D\uDC69\u200D\uD83D\uDCBC' },
+              { name: 'Gopal Sundaram', role: 'Buyer, Chennai',    text: 'The Google Maps feature is brilliant \u2014 I could see all listings near Trichy with one glance. Saved so much time.',              stars: 5, avatar: '\uD83D\uDC68\u200D\uD83D\uDCBB' },
             ].map((t, i) => (
               <div key={i} className="bg-slate-50 rounded-2xl p-6 border border-slate-100 hover:shadow-md transition-shadow">
                 <div className="flex gap-1 mb-3">
@@ -322,9 +304,7 @@ export default function Home() {
                 </div>
                 <p className="text-slate-600 text-sm leading-relaxed mb-4 italic">&ldquo;{t.text}&rdquo;</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-xl">
-                    {t.avatar}
-                  </div>
+                  <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-xl">{t.avatar}</div>
                   <div>
                     <p className="font-semibold text-slate-800 text-sm">{t.name}</p>
                     <p className="text-xs text-slate-500">{t.role}</p>
