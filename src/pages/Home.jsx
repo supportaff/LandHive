@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, MapPin, Shield, ArrowRight, Star, CheckCircle2,
-  TreePine, Home as HomeIcon, Building2, Sprout, ChevronRight, MapPinned,
+  TreePine, Home as HomeIcon, Building2, Sprout, ChevronRight, MapPinned, Loader2,
 } from 'lucide-react'
 import ListingCard from '../components/ListingCard'
 import LocationSearch from '../components/LocationSearch'
-import { LISTINGS, LAND_TYPES } from '../data/listings'
+import { LAND_TYPES } from '../data/listings'
 
 const TN_DISTRICTS = [
   'Chennai', 'Coimbatore', 'Madurai', 'Salem', 'Trichy',
@@ -32,7 +32,43 @@ export default function Home() {
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [landType, setLandType]                 = useState('')
   const [budget, setBudget]                     = useState('')
+  const [featured, setFeatured]                 = useState([])
+  const [loading, setLoading]                   = useState(true)
   const navigate = useNavigate()
+
+  // Fetch featured listings from API
+  useEffect(() => {
+    const fetchFeatured = async () => {
+      try {
+        const res = await fetch('/api/get-listings?featured=true&limit=6')
+        const data = await res.json()
+        if (data.listings) {
+          const transformed = data.listings.map(l => ({
+            id: l.id,
+            title: l.title,
+            landType: l.land_type,
+            area: { value: l.area_value, unit: l.area_unit },
+            price: { total: l.price_total, perAcre: l.price_per_acre },
+            location: {
+              district: l.location_district,
+              village: l.location_village,
+              state: l.location_state,
+            },
+            photos: l.photos || [],
+            verified: l.verified || false,
+            featured: l.featured || false,
+          }))
+          setFeatured(transformed)
+        }
+      } catch (error) {
+        console.error('Failed to fetch featured listings')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchFeatured()
+  }, [])
 
   const handleSearch = () => {
     const p = new URLSearchParams()
@@ -48,8 +84,6 @@ export default function Home() {
     if (budget)   p.set('maxPrice', budget)
     navigate(`/search?${p.toString()}`)
   }
-
-  const featured = LISTINGS.filter(l => l.featured)
 
   return (
     <div className="overflow-x-hidden">
@@ -75,7 +109,7 @@ export default function Home() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-36 pb-32">
           <div className="max-w-3xl">
 
-            {/* Status pill — Tamil Nadu live + coming soon */}
+            {/* Status pill */}
             <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 text-white/90 text-sm px-4 py-2 rounded-full mb-6">
               <MapPinned size={14} className="text-amber-400" />
               Tamil Nadu&apos;s #1 Land Marketplace
@@ -215,11 +249,24 @@ export default function Home() {
               View All <ArrowRight size={16} />
             </button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featured.slice(0, 6).map(l => (
-              <ListingCard key={l.id} listing={l} />
-            ))}
-          </div>
+          
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 size={32} className="animate-spin text-primary-600" />
+            </div>
+          ) : featured.length === 0 ? (
+            <div className="text-center py-12 bg-slate-50 rounded-2xl">
+              <div className="text-4xl mb-3">🏞️</div>
+              <p className="text-slate-600 font-medium">No featured listings yet</p>
+              <p className="text-sm text-slate-400 mt-1">Check back soon for verified properties</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {featured.map(l => (
+                <ListingCard key={l.id} listing={l} />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
