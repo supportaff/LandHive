@@ -1,13 +1,50 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Heart, MessageCircle, Trash2, MapPin, Eye } from 'lucide-react'
-import { LISTINGS, formatPrice, formatArea } from '../data/listings'
+import { Heart, MessageCircle, Trash2, MapPin, Eye, Loader2 } from 'lucide-react'
+import { formatPrice, formatArea } from '../data/listings'
 import { useAuth } from '../hooks/useAuth'
 
 export default function BuyerDashboard() {
   const { user } = useAuth()
-  const [saved, setSaved] = useState(LISTINGS.slice(0, 3))
+  const [saved, setSaved] = useState([])
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('saved')
+
+  // Fetch saved listings from API or localStorage
+  useEffect(() => {
+    const fetchSavedListings = async () => {
+      try {
+        // TODO: Replace with actual API call
+        // const res = await fetch(`/api/get-saved-listings?userId=${user?.id}`)
+        // const data = await res.json()
+        // setSaved(data.listings || [])
+        
+        // For now, use localStorage
+        const savedIds = JSON.parse(localStorage.getItem('savedListings') || '[]')
+        if (savedIds.length > 0) {
+          const res = await fetch(`/api/get-listings?ids=${savedIds.join(',')}`)
+          const data = await res.json()
+          if (data.listings) {
+            const transformed = data.listings.map(l => ({
+              id: l.id,
+              title: l.title,
+              area: { value: l.area_value, unit: l.area_unit },
+              price: { total: l.price_total },
+              location: { district: l.location_district, state: l.location_state },
+              photos: l.photos || ['/placeholder.jpg'],
+            }))
+            setSaved(transformed)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch saved listings')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchSavedListings()
+  }, [user])
 
   if (!user || user.role !== 'buyer') {
     return (
@@ -18,7 +55,12 @@ export default function BuyerDashboard() {
     )
   }
 
-  const remove = (id) => setSaved(s => s.filter(l => l.id !== id))
+  const remove = (id) => {
+    setSaved(s => s.filter(l => l.id !== id))
+    // Update localStorage
+    const savedIds = JSON.parse(localStorage.getItem('savedListings') || '[]')
+    localStorage.setItem('savedListings', JSON.stringify(savedIds.filter(sid => sid !== id)))
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 pt-24">
@@ -43,8 +85,8 @@ export default function BuyerDashboard() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Saved Listings', value: saved.length, icon: Heart, color: 'text-red-500 bg-red-50' },
-          { label: 'Inquiries Sent', value: '3', icon: MessageCircle, color: 'text-blue-500 bg-blue-50' },
-          { label: 'Listings Viewed', value: '18', icon: Eye, color: 'text-purple-500 bg-purple-50' },
+          { label: 'Inquiries Sent', value: '0', icon: MessageCircle, color: 'text-blue-500 bg-blue-50' },
+          { label: 'Listings Viewed', value: '0', icon: Eye, color: 'text-purple-500 bg-purple-50' },
         ].map(s => {
           const Icon = s.icon
           return (
@@ -72,7 +114,11 @@ export default function BuyerDashboard() {
 
       {activeTab === 'saved' && (
         <>
-          {saved.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 size={40} className="animate-spin text-primary-600" />
+            </div>
+          ) : saved.length === 0 ? (
             <div className="text-center py-16">
               <Heart size={40} className="mx-auto mb-4 text-slate-300" />
               <p className="text-slate-500 mb-4">No saved listings yet</p>
@@ -113,20 +159,30 @@ export default function BuyerDashboard() {
       {activeTab === 'inquiries' && (
         <div className="space-y-3">
           {[
-            { listing: 'Fertile Agricultural Land Near Coimbatore', seller: 'Ramesh Kumar', date: '2024-12-10', status: 'replied' },
-            { listing: 'Residential Plot — DTCP Approved, Hosur', seller: 'Priya Suresh', date: '2024-12-08', status: 'pending' },
-            { listing: 'Paddy Field — 12 Acres, Krishna District', seller: 'Srinivasa Rao', date: '2024-12-05', status: 'replied' },
-          ].map((inq, i) => (
-            <div key={i} className="bg-white rounded-xl border border-slate-100 p-4 flex items-center justify-between shadow-sm">
-              <div>
-                <p className="font-medium text-slate-800 text-sm">{inq.listing}</p>
-                <p className="text-xs text-slate-500">Seller: {inq.seller} · {inq.date}</p>
-              </div>
-              <span className={`badge ${inq.status === 'replied' ? 'badge-green' : 'badge-yellow'} capitalize`}>
-                {inq.status}
-              </span>
+            // Mock data - replace with API call later
+          ].length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center shadow-sm">
+              <MessageCircle size={40} className="mx-auto mb-3 text-slate-300" />
+              <p className="text-slate-500 mb-4">No inquiries yet</p>
+              <p className="text-xs text-slate-400">Contact sellers to start conversations</p>
             </div>
-          ))}
+          ) : (
+            [
+              { listing: 'Fertile Agricultural Land Near Coimbatore', seller: 'Ramesh Kumar', date: '2024-12-10', status: 'replied' },
+              { listing: 'Residential Plot — DTCP Approved, Hosur', seller: 'Priya Suresh', date: '2024-12-08', status: 'pending' },
+              { listing: 'Paddy Field — 12 Acres, Krishna District', seller: 'Srinivasa Rao', date: '2024-12-05', status: 'replied' },
+            ].map((inq, i) => (
+              <div key={i} className="bg-white rounded-xl border border-slate-100 p-4 flex items-center justify-between shadow-sm">
+                <div>
+                  <p className="font-medium text-slate-800 text-sm">{inq.listing}</p>
+                  <p className="text-xs text-slate-500">Seller: {inq.seller} · {inq.date}</p>
+                </div>
+                <span className={`badge ${inq.status === 'replied' ? 'badge-green' : 'badge-yellow'} capitalize`}>
+                  {inq.status}
+                </span>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
