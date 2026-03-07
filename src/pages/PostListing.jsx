@@ -8,10 +8,10 @@ import { useUser, useAuth, SignInButton } from '@clerk/clerk-react'
 import MapPlaceholder from '../components/MapPlaceholder'
 
 const LISTING_FEE_TIERS = [
-  { label: '< \u20B925L',     fee: 2499  },
-  { label: '\u20B925L\u2013\u20B950L', fee: 4999  },
-  { label: '\u20B950L\u2013\u20B91Cr', fee: 9999  },
-  { label: '> \u20B91Cr',     fee: 14999 },
+  { label: '< ₹25L',     fee: 2499  },
+  { label: '₹25L–₹50L', fee: 4999  },
+  { label: '₹50L–₹1Cr', fee: 9999  },
+  { label: '> ₹1Cr',     fee: 14999 },
 ]
 
 function getListingFee(price = 0) {
@@ -63,11 +63,22 @@ export default function PostListing() {
 
   const update = (key, val) => setForm(f => {
     const next = { ...f, [key]: val }
-    if ((key === 'totalPrice' || key === 'areaValue') && next.areaUnit === 'acre') {
+    
+    // Auto-calculate per-acre price when totalPrice or areaValue changes
+    if ((key === 'totalPrice' || key === 'areaValue' || key === 'areaUnit') && next.totalPrice && next.areaValue) {
       const total = parseFloat(next.totalPrice) || 0
-      const area  = parseFloat(next.areaValue)  || 1
-      if (area > 0) next.perAcre = (total / area).toFixed(0)
+      let areaInAcres = parseFloat(next.areaValue) || 0
+      
+      // Convert area to acres for per-acre calculation
+      if (next.areaUnit === 'cent') areaInAcres = areaInAcres / 100
+      else if (next.areaUnit === 'sqft') areaInAcres = areaInAcres / 43560
+      else if (next.areaUnit === 'gunta') areaInAcres = areaInAcres / 40
+      
+      if (areaInAcres > 0) {
+        next.perAcre = Math.round(total / areaInAcres)
+      }
     }
+    
     return next
   })
 
@@ -198,7 +209,7 @@ export default function PostListing() {
             }`}>
               <p className={`text-xs ${listingFee === tier.fee ? 'text-primary-100' : 'text-slate-400'}`}>{tier.label}</p>
               <p className={`font-bold text-sm mt-0.5 ${listingFee === tier.fee ? 'text-white' : 'text-primary-600'}`}>
-                \u20B9{tier.fee.toLocaleString('en-IN')}
+                ₹{tier.fee.toLocaleString('en-IN')}
               </p>
             </div>
           ))}
@@ -267,7 +278,7 @@ export default function PostListing() {
               className="flex items-center gap-2 btn-primary flex-1 justify-center disabled:opacity-60">
               {loading
                 ? <><Loader2 size={18} className="animate-spin" /> Saving & Redirecting to PayU...</>
-                : <>Pay \u20B9{listingFee.toLocaleString('en-IN')} via PayU &#x2192;</>}
+                : <>Pay ₹{listingFee.toLocaleString('en-IN')} via PayU &#x2192;</>}
             </button>
           )}
         </div>
@@ -304,7 +315,7 @@ function Step1({ form, update }) {
           <label className="label">Area *</label>
           <div className="flex gap-2">
             <input type="number" value={form.areaValue} onChange={e => update('areaValue', e.target.value)}
-              placeholder="5.5" className="input flex-1" />
+              placeholder="5.5" className="input flex-1" step="0.01" />
             <select value={form.areaUnit} onChange={e => update('areaUnit', e.target.value)} className="input w-24">
               <option value="acre">Acre</option>
               <option value="cent">Cent</option>
@@ -314,21 +325,22 @@ function Step1({ form, update }) {
           </div>
         </div>
         <div>
-          <label className="label">Total Price (\u20B9) *</label>
+          <label className="label">Total Price (₹) *</label>
           <input type="number" value={form.totalPrice} onChange={e => update('totalPrice', e.target.value)}
-            placeholder="e.g. 3500000" className="input" />
+            placeholder="e.g. 3500000" className="input" step="1000" />
+          <p className="text-xs text-slate-400 mt-1">Enter actual amount in rupees (₹35,00,000 = 35 lakhs)</p>
         </div>
       </div>
-      {form.perAcre && (
+      {form.perAcre && form.totalPrice && (
         <div className="bg-primary-50 rounded-xl p-3 text-sm text-primary-700 flex items-center gap-2">
           <CheckCircle size={15} />
-          Auto-calculated: \u20B9{parseInt(form.perAcre).toLocaleString('en-IN')} per acre
+          Auto-calculated: <strong>{formatPrice(form.perAcre)} per acre</strong>
         </div>
       )}
       {form.totalPrice && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700 flex items-center gap-2">
           <Info size={15} className="shrink-0" />
-          Listing fee for this value: <strong>\u20B9{getListingFee(parseFloat(form.totalPrice)).toLocaleString('en-IN')}</strong>
+          Listing fee for {formatPrice(parseFloat(form.totalPrice))}: <strong>₹{getListingFee(parseFloat(form.totalPrice)).toLocaleString('en-IN')}</strong>
         </div>
       )}
       <div>
@@ -482,9 +494,9 @@ function Step4KYC({ form, update }) {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { key: 'kycAadhaarDoc', label: 'Aadhaar Card', icon: '\uD83E\uDEB4', hint: 'Front & back' },
-          { key: 'kycPanDoc',     label: 'PAN Card',     icon: '\uD83D\uDCB3', hint: 'Clear photo'  },
-          { key: 'kycSelfie',     label: 'Selfie',       icon: '\uD83E\uDD33', hint: 'Face clearly visible' },
+          { key: 'kycAadhaarDoc', label: 'Aadhaar Card', icon: '🪴', hint: 'Front & back' },
+          { key: 'kycPanDoc',     label: 'PAN Card',     icon: '💳', hint: 'Clear photo'  },
+          { key: 'kycSelfie',     label: 'Selfie',       icon: '🤳', hint: 'Face clearly visible' },
         ].map(doc => (
           <div key={doc.key}
             className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-primary-300 hover:bg-primary-50/50 transition-all">
@@ -524,7 +536,7 @@ function Step5Pay({ form, listingFee }) {
             <p className="font-semibold text-slate-800 text-sm">{form.title || 'Your Land Title'}</p>
             <p className="text-xs text-slate-500 mt-0.5">{form.district || 'Tamil Nadu'}, Tamil Nadu</p>
             <p className="text-primary-600 font-bold mt-1">
-              {form.totalPrice ? `\u20B9${(parseFloat(form.totalPrice) / 100000).toFixed(1)}L` : '\u20B9—'}
+              {form.totalPrice ? formatPrice(parseFloat(form.totalPrice)) : '₹—'}
             </p>
           </div>
         </div>
@@ -542,7 +554,7 @@ function Step5Pay({ form, listingFee }) {
             <p className="text-primary-600 text-sm">One-time · Based on property value</p>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-display font-bold text-primary-700">\u20B9{listingFee.toLocaleString('en-IN')}</p>
+            <p className="text-3xl font-display font-bold text-primary-700">₹{listingFee.toLocaleString('en-IN')}</p>
             <p className="text-xs text-primary-500">incl. all taxes</p>
           </div>
         </div>

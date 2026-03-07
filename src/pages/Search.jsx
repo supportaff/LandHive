@@ -63,9 +63,10 @@ export default function Search() {
         if (filters.state) params.append('state', filters.state)
         if (filters.district) params.append('district', filters.district)
         if (filters.landType) params.append('landType', filters.landType)
+        // Convert lakhs input to actual rupees for API
         if (filters.minPrice) params.append('minPrice', Number(filters.minPrice) * 100000)
         if (filters.maxPrice) params.append('maxPrice', Number(filters.maxPrice) * 100000)
-        if (filters.verifiedOnly) params.append('featured', 'true')
+        if (filters.verifiedOnly) params.append('verified', 'true')
         if (mapCenter) {
           params.append('lat', mapCenter.lat)
           params.append('lng', mapCenter.lng)
@@ -175,14 +176,16 @@ export default function Search() {
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="label">Min (₹L)</label>
+          <label className="label">Min Price</label>
           <input type="number" placeholder="0" value={filters.minPrice}
-            onChange={e => update('minPrice', e.target.value)} className="input text-sm" />
+            onChange={e => update('minPrice', e.target.value)} className="input text-sm" step="5" />
+          <p className="text-[10px] text-slate-400 mt-0.5">In lakhs (₹L)</p>
         </div>
         <div>
-          <label className="label">Max (₹L)</label>
+          <label className="label">Max Price</label>
           <input type="number" placeholder="Any" value={filters.maxPrice}
-            onChange={e => update('maxPrice', e.target.value)} className="input text-sm" />
+            onChange={e => update('maxPrice', e.target.value)} className="input text-sm" step="5" />
+          <p className="text-[10px] text-slate-400 mt-0.5">In lakhs (₹L)</p>
         </div>
       </div>
       <div className="flex items-center gap-2.5 p-2.5 bg-primary-50 rounded-xl">
