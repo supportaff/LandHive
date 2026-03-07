@@ -1,19 +1,51 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Shield, CheckCircle, XCircle, BadgeCheck, Users, BarChart3,
   AlertTriangle, Eye, Loader2 } from 'lucide-react'
-import { LISTINGS, formatPrice, formatArea } from '../data/listings'
+import { formatPrice, formatArea } from '../data/listings'
 import { useAuth } from '../hooks/useAuth'
 
 export default function AdminPanel() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('pending')
-  const [listings, setListings] = useState(
-    LISTINGS.map(l => ({ ...l, status: l.id === '3' ? 'pending' : l.status }))
-  )
+  const [listings, setListings] = useState([])
+  const [loading, setLoading] = useState(true)
   const [rejectModal, setRejectModal] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
   const [processing, setProcessing] = useState(null)
+
+  // Fetch all listings for admin
+  useEffect(() => {
+    const fetchAllListings = async () => {
+      try {
+        const res = await fetch('/api/get-listings?admin=true')
+        const data = await res.json()
+        if (data.listings) {
+          const transformed = data.listings.map(l => ({
+            id: l.id,
+            title: l.title,
+            landType: l.land_type,
+            area: { value: l.area_value, unit: l.area_unit },
+            price: { total: l.price_total, perAcre: l.price_per_acre },
+            location: { district: l.location_district, state: l.location_state },
+            photos: l.photos || ['/placeholder.jpg'],
+            status: l.status || 'pending',
+            verified: l.verified || false,
+            viewCount: l.view_count || 0,
+            sellerName: l.seller_name || 'Anonymous',
+            description: l.description || '',
+          }))
+          setListings(transformed)
+        }
+      } catch (error) {
+        console.error('Failed to fetch listings')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAllListings()
+  }, [])
 
   if (!user || user.role !== 'admin') {
     return (
@@ -30,6 +62,7 @@ export default function AdminPanel() {
 
   const approve = async (id) => {
     setProcessing(id)
+    // TODO: Call /api/admin/approve-listing
     await new Promise(r => setTimeout(r, 800))
     setListings(ls => ls.map(l => l.id === id ? { ...l, status: 'approved' } : l))
     setProcessing(null)
@@ -37,6 +70,7 @@ export default function AdminPanel() {
 
   const reject = async () => {
     setProcessing(rejectModal)
+    // TODO: Call /api/admin/reject-listing
     await new Promise(r => setTimeout(r, 800))
     setListings(ls => ls.map(l => l.id === rejectModal ? { ...l, status: 'rejected', rejectReason } : l))
     setRejectModal(null)
@@ -45,6 +79,7 @@ export default function AdminPanel() {
   }
 
   const toggleVerified = (id) => {
+    // TODO: Call /api/admin/toggle-verified
     setListings(ls => ls.map(l => l.id === id ? { ...l, verified: !l.verified } : l))
   }
 
@@ -102,7 +137,11 @@ export default function AdminPanel() {
         {/* Pending Tab */}
         {activeTab === 'pending' && (
           <div className="space-y-4">
-            {pending.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 size={40} className="animate-spin text-primary-600" />
+              </div>
+            ) : pending.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center shadow-sm">
                 <CheckCircle size={40} className="mx-auto mb-3 text-primary-500" />
                 <p className="text-slate-500 font-medium">All listings reviewed! No pending items.</p>
@@ -162,45 +201,55 @@ export default function AdminPanel() {
         {/* Approved Tab */}
         {activeTab === 'approved' && (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    {['Listing', 'Seller', 'Area', 'Price', 'Verified', 'Views', 'Actions'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {approved.map(l => (
-                    <tr key={l.id} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <img src={l.photos[0]} alt="" className="w-10 h-9 object-cover rounded-lg" />
-                          <span className="font-medium text-slate-800 text-xs line-clamp-1 max-w-[160px]">{l.title}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 text-xs">{l.sellerName}</td>
-                      <td className="px-4 py-3 text-slate-600 text-xs">{formatArea(l.area)}</td>
-                      <td className="px-4 py-3 font-semibold text-primary-600 text-xs">{formatPrice(l.price.total)}</td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => toggleVerified(l.id)}
-                          className={`badge cursor-pointer transition-colors ${l.verified ? 'badge-green' : 'bg-slate-100 text-slate-500'}`}>
-                          {l.verified ? '✓ Verified' : 'Unverified'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 text-xs">{l.viewCount}</td>
-                      <td className="px-4 py-3">
-                        <Link to={`/listing/${l.id}`}
-                          className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition-colors flex items-center gap-1 w-fit">
-                          <Eye size={11} /> View
-                        </Link>
-                      </td>
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 size={40} className="animate-spin text-primary-600" />
+              </div>
+            ) : approved.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-slate-500">No approved listings yet</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      {['Listing', 'Seller', 'Area', 'Price', 'Verified', 'Views', 'Actions'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {approved.map(l => (
+                      <tr key={l.id} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <img src={l.photos[0]} alt="" className="w-10 h-9 object-cover rounded-lg" />
+                            <span className="font-medium text-slate-800 text-xs line-clamp-1 max-w-[160px]">{l.title}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 text-xs">{l.sellerName}</td>
+                        <td className="px-4 py-3 text-slate-600 text-xs">{formatArea(l.area)}</td>
+                        <td className="px-4 py-3 font-semibold text-primary-600 text-xs">{formatPrice(l.price.total)}</td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => toggleVerified(l.id)}
+                            className={`badge cursor-pointer transition-colors ${l.verified ? 'badge-green' : 'bg-slate-100 text-slate-500'}`}>
+                            {l.verified ? '✓ Verified' : 'Unverified'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 text-xs">{l.viewCount}</td>
+                        <td className="px-4 py-3">
+                          <Link to={`/listing/${l.id}`}
+                            className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition-colors flex items-center gap-1 w-fit">
+                            <Eye size={11} /> View
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

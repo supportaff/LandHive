@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, ListFilter, MessageCircle, Bell, Settings,
   Plus, Eye, Trash2, Edit, CheckCircle2, Clock, XCircle,
-  TrendingUp, DollarSign, Star, BadgeCheck } from 'lucide-react'
-import { LISTINGS, formatPrice, formatArea } from '../data/listings'
+  TrendingUp, DollarSign, Star, BadgeCheck, Loader2 } from 'lucide-react'
+import { formatPrice, formatArea } from '../data/listings'
 import { useAuth } from '../hooks/useAuth'
 
 const NAV = [
@@ -25,6 +25,39 @@ export default function SellerDashboard() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
   const [deleteId, setDeleteId] = useState(null)
+  const [myListings, setMyListings] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  // Fetch seller's listings
+  useEffect(() => {
+    const fetchMyListings = async () => {
+      if (!user?.id) return
+      try {
+        const res = await fetch(`/api/get-listings?sellerId=${user.id}`)
+        const data = await res.json()
+        if (data.listings) {
+          const transformed = data.listings.map(l => ({
+            id: l.id,
+            title: l.title,
+            landType: l.land_type,
+            area: { value: l.area_value, unit: l.area_unit },
+            price: { total: l.price_total, perAcre: l.price_per_acre },
+            location: { district: l.location_district },
+            photos: l.photos || ['/placeholder.jpg'],
+            status: l.status || 'pending',
+            inquiryCount: l.inquiry_count || 0,
+          }))
+          setMyListings(transformed)
+        }
+      } catch (error) {
+        console.error('Failed to fetch listings')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchMyListings()
+  }, [user])
 
   if (!user || user.role !== 'seller') {
     return (
@@ -35,12 +68,11 @@ export default function SellerDashboard() {
     )
   }
 
-  const myListings = LISTINGS.slice(0, 4)
   const stats = [
-    { label: 'Active Listings', value: '3', icon: CheckCircle2, color: 'text-primary-600 bg-primary-50' },
-    { label: 'Total Inquiries', value: '23', icon: MessageCircle, color: 'text-blue-600 bg-blue-50' },
-    { label: 'This Month Views', value: '412', icon: Eye, color: 'text-purple-600 bg-purple-50' },
-    { label: 'Total Earnings', value: '₹2,997', icon: DollarSign, color: 'text-amber-600 bg-amber-50' },
+    { label: 'Active Listings', value: myListings.filter(l => l.status === 'approved').length, icon: CheckCircle2, color: 'text-primary-600 bg-primary-50' },
+    { label: 'Total Inquiries', value: myListings.reduce((sum, l) => sum + l.inquiryCount, 0), icon: MessageCircle, color: 'text-blue-600 bg-blue-50' },
+    { label: 'This Month Views', value: '0', icon: Eye, color: 'text-purple-600 bg-purple-50' },
+    { label: 'Total Earnings', value: '₹0', icon: DollarSign, color: 'text-amber-600 bg-amber-50' },
   ]
 
   return (
@@ -67,8 +99,8 @@ export default function SellerDashboard() {
                   ${activeTab === item.id ? 'bg-primary-50 text-primary-700' : 'text-slate-600 hover:bg-slate-50'}`}>
                 <Icon size={17} />
                 {item.label}
-                {item.id === 'inquiries' && (
-                  <span className="ml-auto badge bg-red-100 text-red-600 text-xs">1</span>
+                {item.id === 'inquiries' && MOCK_INQUIRIES.filter(i => i.status === 'new').length > 0 && (
+                  <span className="ml-auto badge bg-red-100 text-red-600 text-xs">{MOCK_INQUIRIES.filter(i => i.status === 'new').length}</span>
                 )}
               </button>
             )
@@ -135,18 +167,31 @@ export default function SellerDashboard() {
                   <h3 className="font-semibold text-slate-800">Recent Listings</h3>
                   <button onClick={() => setActiveTab('listings')} className="text-xs text-primary-600 font-medium">View all</button>
                 </div>
-                <div className="divide-y divide-slate-50">
-                  {myListings.slice(0, 3).map(l => (
-                    <div key={l.id} className="flex items-center gap-4 p-4">
-                      <img src={l.photos[0]} alt="" className="w-14 h-11 object-cover rounded-lg shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{l.title}</p>
-                        <p className="text-xs text-slate-400">{formatArea(l.area)} · {formatPrice(l.price.total)}</p>
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 size={24} className="animate-spin text-primary-600" />
+                  </div>
+                ) : myListings.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-slate-500 mb-4">No listings yet</p>
+                    <Link to="/post" className="btn-primary inline-flex items-center gap-2">
+                      <Plus size={16} /> Post Your First Listing
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-50">
+                    {myListings.slice(0, 3).map(l => (
+                      <div key={l.id} className="flex items-center gap-4 p-4">
+                        <img src={l.photos[0]} alt="" className="w-14 h-11 object-cover rounded-lg shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{l.title}</p>
+                          <p className="text-xs text-slate-400">{formatArea(l.area)} · {formatPrice(l.price.total)}</p>
+                        </div>
+                        <StatusPill status={l.status} />
                       </div>
-                      <StatusPill status={l.status} />
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -154,100 +199,128 @@ export default function SellerDashboard() {
           {/* Listings Tab */}
           {activeTab === 'listings' && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      {['Listing', 'Area', 'Price', 'Status', 'Inquiries', 'Actions'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {myListings.map(l => (
-                      <tr key={l.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <img src={l.photos[0]} alt="" className="w-12 h-10 object-cover rounded-lg shrink-0" />
-                            <div>
-                              <p className="font-medium text-slate-800 line-clamp-1 max-w-[180px]">{l.title}</p>
-                              <p className="text-xs text-slate-400">{l.location.district}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">{formatArea(l.area)}</td>
-                        <td className="px-4 py-3 font-semibold text-primary-600">{formatPrice(l.price.total)}</td>
-                        <td className="px-4 py-3"><StatusPill status={l.status} /></td>
-                        <td className="px-4 py-3 text-slate-600">{l.inquiryCount}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-1">
-                            <Link to={`/listing/${l.id}`}
-                              className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 transition-colors">
-                              <Eye size={13} />
-                            </Link>
-                            <button className="w-7 h-7 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 transition-colors">
-                              <Edit size={13} />
-                            </button>
-                            <button onClick={() => setDeleteId(l.id)}
-                              className="w-7 h-7 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center text-red-500 transition-colors">
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </td>
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 size={32} className="animate-spin text-primary-600" />
+                </div>
+              ) : myListings.length === 0 ? (
+                <div className="text-center py-16 px-6">
+                  <div className="text-5xl mb-4">🏞️</div>
+                  <h3 className="font-semibold text-slate-800 mb-2">No Listings Yet</h3>
+                  <p className="text-slate-500 mb-6 text-sm">Start selling your land by posting your first listing</p>
+                  <Link to="/post" className="btn-primary inline-flex items-center gap-2">
+                    <Plus size={16} /> Post Your First Listing
+                  </Link>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        {['Listing', 'Area', 'Price', 'Status', 'Inquiries', 'Actions'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {myListings.map(l => (
+                        <tr key={l.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <img src={l.photos[0]} alt="" className="w-12 h-10 object-cover rounded-lg shrink-0" />
+                              <div>
+                                <p className="font-medium text-slate-800 line-clamp-1 max-w-[180px]">{l.title}</p>
+                                <p className="text-xs text-slate-400">{l.location.district}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">{formatArea(l.area)}</td>
+                          <td className="px-4 py-3 font-semibold text-primary-600">{formatPrice(l.price.total)}</td>
+                          <td className="px-4 py-3"><StatusPill status={l.status} /></td>
+                          <td className="px-4 py-3 text-slate-600">{l.inquiryCount}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1">
+                              <Link to={`/listing/${l.id}`}
+                                className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center text-slate-600 transition-colors">
+                                <Eye size={13} />
+                              </Link>
+                              <button className="w-7 h-7 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 transition-colors">
+                                <Edit size={13} />
+                              </button>
+                              <button onClick={() => setDeleteId(l.id)}
+                                className="w-7 h-7 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center text-red-500 transition-colors">
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
           {/* Inquiries Tab */}
           {activeTab === 'inquiries' && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="divide-y divide-slate-50">
-                {MOCK_INQUIRIES.map(inq => (
-                  <div key={inq.id} className={`p-4 flex items-center gap-4 ${inq.status === 'new' ? 'bg-primary-50/30' : ''}`}>
-                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 font-bold shrink-0">
-                      {inq.buyer.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-slate-800 text-sm">{inq.buyer}</p>
-                        {inq.status === 'new' && <span className="badge bg-red-100 text-red-600">New</span>}
+              {MOCK_INQUIRIES.length === 0 ? (
+                <div className="text-center py-12">
+                  <MessageCircle size={40} className="mx-auto mb-3 text-slate-300" />
+                  <p className="text-slate-500">No inquiries yet</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-50">
+                  {MOCK_INQUIRIES.map(inq => (
+                    <div key={inq.id} className={`p-4 flex items-center gap-4 ${inq.status === 'new' ? 'bg-primary-50/30' : ''}`}>
+                      <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 font-bold shrink-0">
+                        {inq.buyer.charAt(0)}
                       </div>
-                      <p className="text-xs text-slate-500 truncate">Re: {inq.listing}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{inq.date}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-slate-800 text-sm">{inq.buyer}</p>
+                          {inq.status === 'new' && <span className="badge bg-red-100 text-red-600">New</span>}
+                        </div>
+                        <p className="text-xs text-slate-500 truncate">Re: {inq.listing}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{inq.date}</p>
+                      </div>
+                      <a href={`tel:${inq.phone}`}
+                        className="shrink-0 text-xs bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 transition-colors">
+                        📞 Call
+                      </a>
                     </div>
-                    <a href={`tel:${inq.phone}`}
-                      className="shrink-0 text-xs bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 transition-colors">
-                      📞 Call
-                    </a>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* Alerts Tab */}
           {activeTab === 'alerts' && (
             <div className="space-y-3">
-              {[
-                { msg: 'Your listing "Fertile Agricultural Land Near Coimbatore" has been approved!', time: '2 hours ago', type: 'success' },
-                { msg: 'New inquiry received on "Paddy Field — 12 Acres, Krishna District"', time: '1 day ago', type: 'info' },
-                { msg: 'Your listing has received 100+ views this week!', time: '3 days ago', type: 'tip' },
-              ].map((a, i) => (
-                <div key={i} className={`flex gap-4 p-4 rounded-xl border ${
-                  a.type === 'success' ? 'bg-primary-50 border-primary-200' :
-                  a.type === 'info' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'
-                }`}>
-                  <div className="text-lg">{a.type === 'success' ? '✅' : a.type === 'info' ? '📩' : '💡'}</div>
-                  <div>
-                    <p className="text-sm text-slate-700">{a.msg}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{a.time}</p>
-                  </div>
+              {myListings.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+                  <Bell size={40} className="mx-auto mb-3 text-slate-300" />
+                  <p className="text-slate-500">No alerts yet</p>
                 </div>
-              ))}
+              ) : (
+                [
+                  { msg: 'Your listing has been submitted for review', time: '1 hour ago', type: 'info' },
+                  { msg: 'Complete your seller profile to boost visibility', time: '2 days ago', type: 'tip' },
+                ].map((a, i) => (
+                  <div key={i} className={`flex gap-4 p-4 rounded-xl border ${
+                    a.type === 'success' ? 'bg-primary-50 border-primary-200' :
+                    a.type === 'info' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'
+                  }`}>
+                    <div className="text-lg">{a.type === 'success' ? '✅' : a.type === 'info' ? '📩' : '💡'}</div>
+                    <div>
+                      <p className="text-sm text-slate-700">{a.msg}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{a.time}</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
 
