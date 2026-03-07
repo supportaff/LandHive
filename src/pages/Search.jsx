@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { MapPin, SlidersHorizontal, X, BadgeCheck, LayoutList, Map, Navigation, Search as SearchIcon } from 'lucide-react'
+import { MapPin, SlidersHorizontal, X, BadgeCheck, LayoutList, Map, Navigation, Search as SearchIcon, Loader2 } from 'lucide-react'
 import GoogleMapView from '../components/GoogleMapView'
-import { LISTINGS, STATES, LAND_TYPES, formatPrice, formatArea } from '../data/listings'
+import { STATES, LAND_TYPES, formatPrice, formatArea } from '../data/listings'
 
 export default function Search() {
   const [searchParams] = useSearchParams()
 
-  // Map center from URL (set by homepage location search)
   const urlLat      = searchParams.get('lat')
   const urlLng      = searchParams.get('lng')
   const urlLocation = searchParams.get('location')
@@ -27,26 +26,24 @@ export default function Search() {
   const [mobileView, setMobileView] = useState('list')
   const [showFilters, setShowFilters] = useState(false)
   const [locationInput, setLocationInput] = useState(urlLocation || '')
+  const [listings, setListings] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  // Google Places Autocomplete
   const locationInputRef = useRef(null)
   const autocompleteRef = useRef(null)
 
+  // Google Places Autocomplete
   useEffect(() => {
     if (!window.google?.maps?.places || !locationInputRef.current) return
     
     const autocomplete = new window.google.maps.places.Autocomplete(
       locationInputRef.current,
-      {
-        types: ['(cities)'],
-        componentRestrictions: { country: 'in' },
-      }
+      { types: ['(cities)'], componentRestrictions: { country: 'in' } }
     )
 
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace()
       if (!place.geometry?.location) return
-
       const lat = place.geometry.location.lat()
       const lng = place.geometry.location.lng()
       setMapCenter({ lat, lng })
@@ -57,15 +54,59 @@ export default function Search() {
     autocompleteRef.current = autocomplete
   }, [])
 
-  const filtered = LISTINGS.filter(l => {
-    if (filters.state    && l.location.state    !== filters.state)                                        return false
-    if (filters.district && !l.location.district.toLowerCase().includes(filters.district.toLowerCase())) return false
-    if (filters.landType && l.landType          !== filters.landType)                                     return false
-    if (filters.verifiedOnly && !l.verified)                                                              return false
-    if (filters.minPrice && l.price.total < Number(filters.minPrice) * 100000)                           return false
-    if (filters.maxPrice && l.price.total > Number(filters.maxPrice) * 100000)                           return false
-    return true
-  })
+  // Fetch listings from Supabase API
+  useEffect(() => {
+    const fetchListings = async () => {
+      setLoading(true)
+      try {
+        const params = new URLSearchParams()
+        if (filters.state) params.append('state', filters.state)
+        if (filters.district) params.append('district', filters.district)
+        if (filters.landType) params.append('landType', filters.landType)
+        if (filters.minPrice) params.append('minPrice', Number(filters.minPrice) * 100000)
+        if (filters.maxPrice) params.append('maxPrice', Number(filters.maxPrice) * 100000)
+        if (filters.verifiedOnly) params.append('featured', 'true')
+        if (mapCenter) {
+          params.append('lat', mapCenter.lat)
+          params.append('lng', mapCenter.lng)
+          params.append('radius', '50')
+        }
+
+        const res = await fetch(`/api/get-listings?${params.toString()}`)
+        const data = await res.json()
+        
+        if (data.listings) {
+          // Transform Supabase data to match old format
+          const transformed = data.listings.map(l => ({
+            id: l.id,
+            title: l.title,
+            landType: l.land_type,
+            area: { value: l.area_value, unit: l.area_unit },
+            price: { total: l.price_total, perAcre: l.price_per_acre },
+            location: {
+              district: l.location_district,
+              village: l.location_village,
+              state: l.location_state,
+              lat: l.location_lat,
+              lng: l.location_lng,
+            },
+            photos: l.photos || [],
+            verified: l.verified || false,
+            featured: l.featured || false,
+            viewCount: l.view_count || 0,
+            createdAt: l.created_at,
+          }))
+          setListings(transformed)
+        }
+      } catch (error) {
+        console.error('Failed to fetch listings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchListings()
+  }, [filters, mapCenter])
 
   const update = (k, v) => setFilters(f => ({ ...f, [k]: v }))
   const clear  = () => {
@@ -92,7 +133,6 @@ export default function Search() {
         )}
       </div>
 
-      {/* Location Search with Google Places */}
       <div>
         <label className="label">Search Location</label>
         <div className="relative">
@@ -157,10 +197,8 @@ export default function Search() {
 
   return (
     <div className="flex flex-col" style={{ height: '100dvh', paddingTop: 64 }}>
-
-      {/* Mobile top bar */}
       <div className="md:hidden flex items-center justify-between px-3 py-2.5 bg-white border-b border-slate-100 shadow-sm shrink-0">
-        <span className="text-sm font-bold text-slate-700">{filtered.length} listings</span>
+        <span className="text-sm font-bold text-slate-700">{listings.length} listings</span>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowFilters(v => !v)}
@@ -187,7 +225,6 @@ export default function Search() {
         </div>
       </div>
 
-      {/* Mobile filter drawer */}
       {showFilters && (
         <div className="md:hidden bg-white border-b border-slate-200 shadow-lg z-30 shrink-0 overflow-y-auto max-h-[70vh]">
           <FiltersUI />
@@ -195,8 +232,6 @@ export default function Search() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-
-        {/* LEFT: filters + cards */}
         <div className={`
           md:w-[340px] lg:w-[380px] md:shrink-0 md:flex md:flex-col md:border-r md:border-slate-100 md:bg-white md:overflow-hidden
           ${mobileView === 'list' ? 'flex flex-col w-full' : 'hidden'}
@@ -205,10 +240,14 @@ export default function Search() {
             <FiltersUI />
           </div>
           <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
-            <span className="text-xs font-semibold text-slate-500">{filtered.length} listings found</span>
+            <span className="text-xs font-semibold text-slate-500">{listings.length} listings found</span>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 size={24} className="animate-spin text-primary-600" />
+              </div>
+            ) : listings.length === 0 ? (
               <div className="text-center py-12 sm:py-16 px-6">
                 <div className="text-4xl sm:text-5xl mb-4">🏞️</div>
                 <p className="text-slate-500 text-sm font-medium">No listings match your filters</p>
@@ -216,7 +255,7 @@ export default function Search() {
               </div>
             ) : (
               <div className="divide-y divide-slate-50">
-                {filtered.map(l => (
+                {listings.map(l => (
                   <MiniCard
                     key={l.id}
                     listing={l}
@@ -229,26 +268,24 @@ export default function Search() {
           </div>
         </div>
 
-        {/* RIGHT: Google Map */}
         <div className={`
           flex-1 relative
           ${mobileView === 'map' ? 'flex flex-col w-full' : 'hidden md:block'}
         `}>
           <div className="absolute top-3 left-3 z-10 bg-white/95 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow-md border border-slate-100 pointer-events-none">
-            <span className="text-xs font-bold text-slate-700">{filtered.length} on map</span>
+            <span className="text-xs font-bold text-slate-700">{listings.length} on map</span>
           </div>
 
           <GoogleMapView
-            listings={filtered}
+            listings={listings}
             selectedId={selectedId}
             onMarkerClick={l => setSelectedId(l.id === selectedId ? null : l.id)}
             height="100%"
             center={mapCenter}
           />
 
-          {/* Selected listing bottom card */}
           {selectedId && (() => {
-            const l = filtered.find(x => x.id === selectedId)
+            const l = listings.find(x => x.id === selectedId)
             if (!l) return null
             return (
               <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 w-[min(340px,calc(100vw-20px))] sm:w-[min(360px,calc(100vw-32px))]">
@@ -259,7 +296,7 @@ export default function Search() {
                     <X size={13} className="text-white" strokeWidth={2.5} />
                   </button>
                   <div className="flex">
-                    <img src={l.photos[0]} alt="" className="w-24 sm:w-28 h-20 sm:h-24 object-cover shrink-0" />
+                    {l.photos[0] && <img src={l.photos[0]} alt="" className="w-24 sm:w-28 h-20 sm:h-24 object-cover shrink-0" />}
                     <div className="p-2.5 sm:p-3 flex flex-col justify-between flex-1 min-w-0">
                       <div>
                         <p className="text-xs sm:text-sm font-semibold text-slate-800 line-clamp-2 leading-snug pr-5">{l.title}</p>
@@ -295,7 +332,7 @@ function MiniCard({ listing, isSelected, onClick }) {
       style={{ borderLeft: `3px solid ${isSelected ? '#16a34a' : 'transparent'}` }}>
       <div className="flex gap-2.5 sm:gap-3">
         <div className="relative shrink-0">
-          <img src={listing.photos[0]} alt="" className="w-20 sm:w-24 h-14 sm:h-16 object-cover rounded-xl" />
+          {listing.photos[0] && <img src={listing.photos[0]} alt="" className="w-20 sm:w-24 h-14 sm:h-16 object-cover rounded-xl" />}
           {listing.verified && (
             <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary-600 rounded-full flex items-center justify-center shadow-md">
               <BadgeCheck size={11} className="text-white" />
