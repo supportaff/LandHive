@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { MapPin, ChevronRight, BadgeCheck, Eye, MessageCircle, Phone, Share2,
   Heart, Ruler, FileText, User, CheckCircle, XCircle, Calendar,
-  Building, ArrowLeft, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
-import { LISTINGS, formatPrice, formatArea } from '../data/listings'
+  Building, ArrowLeft, ChevronLeft, ChevronRight as ChevronRightIcon, Loader2 } from 'lucide-react'
+import { formatPrice, formatArea } from '../data/listings'
 import { useAuth } from '../hooks/useAuth'
 import MapPlaceholder from '../components/MapPlaceholder'
 
@@ -11,10 +11,58 @@ export default function ListingDetail() {
   const { id } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const listing = LISTINGS.find(l => l.id === id) || LISTINGS[0]
+  const [listing, setListing] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [photoIdx, setPhotoIdx] = useState(0)
   const [showContact, setShowContact] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // Fetch listing from API
+  useEffect(() => {
+    const fetchListing = async () => {
+      try {
+        const res = await fetch(`/api/get-listing?id=${id}`)
+        const data = await res.json()
+        if (data.listing) {
+          // Transform Supabase data
+          const l = data.listing
+          setListing({
+            id: l.id,
+            title: l.title,
+            landType: l.land_type,
+            area: { value: l.area_value, unit: l.area_unit },
+            price: { total: l.price_total, perAcre: l.price_per_acre },
+            location: {
+              district: l.location_district,
+              village: l.location_village,
+              state: l.location_state,
+              address: l.location_address || `${l.location_village}, ${l.location_district}`,
+              surveyNumber: l.survey_number || 'N/A',
+            },
+            photos: l.photos || ['/placeholder.jpg'],
+            verified: l.verified || false,
+            featured: l.featured || false,
+            viewCount: l.view_count || 0,
+            inquiryCount: l.inquiry_count || 0,
+            description: l.description || 'No description provided.',
+            createdAt: l.created_at,
+            sellerName: l.seller_name || 'Anonymous',
+            sellerPhone: l.seller_phone || 'N/A',
+            sellerSince: l.seller_since || '2026',
+            sellerListings: l.seller_listings || 1,
+            nearbyAmenities: l.nearby_amenities || { highway: 'N/A', town: 'N/A', station: 'N/A' },
+            verificationDocs: l.verification_docs || { ec: false, survey: false, ftl: false },
+          })
+        }
+      } catch (error) {
+        console.error('Failed to fetch listing')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchListing()
+  }, [id])
 
   const handleContact = () => {
     if (!user) { navigate('/sign-in'); return }
@@ -27,6 +75,27 @@ export default function ListingDetail() {
     commercial: 'bg-purple-100 text-purple-700',
     farm: 'bg-emerald-100 text-emerald-700',
     na: 'bg-orange-100 text-orange-700',
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 size={48} className="animate-spin text-primary-600" />
+      </div>
+    )
+  }
+
+  if (!listing) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-24 text-center">
+        <div className="text-6xl mb-4">🔍</div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-2">Listing Not Found</h2>
+        <p className="text-slate-500 mb-6">This listing may have been removed or doesn't exist.</p>
+        <Link to="/search" className="btn btn-primary inline-flex items-center gap-2">
+          <ArrowLeft size={16} /> Back to Search
+        </Link>
+      </div>
+    )
   }
 
   return (
@@ -77,14 +146,16 @@ export default function ListingDetail() {
             </div>
 
             {/* Thumbnail strip */}
-            <div className="flex gap-2 mt-2">
-              {listing.photos.map((p, i) => (
-                <button key={i} onClick={() => setPhotoIdx(i)}
-                  className={`w-16 h-12 rounded-lg overflow-hidden border-2 transition-all ${i === photoIdx ? 'border-primary-500 shadow-md' : 'border-transparent opacity-70 hover:opacity-100'}`}>
-                  <img src={p} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
+            {listing.photos.length > 1 && (
+              <div className="flex gap-2 mt-2">
+                {listing.photos.map((p, i) => (
+                  <button key={i} onClick={() => setPhotoIdx(i)}
+                    className={`w-16 h-12 rounded-lg overflow-hidden border-2 transition-all ${i === photoIdx ? 'border-primary-500 shadow-md' : 'border-transparent opacity-70 hover:opacity-100'}`}>
+                    <img src={p} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Title section */}
@@ -153,16 +224,18 @@ export default function ListingDetail() {
           </div>
 
           {/* Nearby amenities */}
-          <div className="bg-white rounded-2xl border border-slate-100 p-5">
-            <h3 className="font-semibold text-slate-800 mb-3">Nearby Amenities</h3>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(listing.nearbyAmenities).map(([key, val]) => (
-                <span key={key} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-600 text-xs px-3 py-2 rounded-xl">
-                  {key === 'highway' ? '🛣️' : key === 'town' ? '🏘️' : '🚂'} {val}
-                </span>
-              ))}
+          {listing.nearbyAmenities && Object.keys(listing.nearbyAmenities).length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-100 p-5">
+              <h3 className="font-semibold text-slate-800 mb-3">Nearby Amenities</h3>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(listing.nearbyAmenities).map(([key, val]) => (
+                  <span key={key} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-600 text-xs px-3 py-2 rounded-xl">
+                    {key === 'highway' ? '🛣️' : key === 'town' ? '🏘️' : '🚂'} {val}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right Column — Sticky */}
