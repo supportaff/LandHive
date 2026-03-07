@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { MapPin, SlidersHorizontal, X, BadgeCheck, LayoutList, Map, Navigation } from 'lucide-react'
+import { MapPin, SlidersHorizontal, X, BadgeCheck, LayoutList, Map, Navigation, Search as SearchIcon } from 'lucide-react'
 import GoogleMapView from '../components/GoogleMapView'
 import { LISTINGS, STATES, LAND_TYPES, formatPrice, formatArea } from '../data/listings'
 
@@ -11,7 +11,9 @@ export default function Search() {
   const urlLat      = searchParams.get('lat')
   const urlLng      = searchParams.get('lng')
   const urlLocation = searchParams.get('location')
-  const mapCenter   = urlLat && urlLng ? { lat: parseFloat(urlLat), lng: parseFloat(urlLng) } : null
+  const [mapCenter, setMapCenter] = useState(
+    urlLat && urlLng ? { lat: parseFloat(urlLat), lng: parseFloat(urlLng) } : null
+  )
 
   const [filters, setFilters] = useState({
     state:        searchParams.get('state')    || '',
@@ -24,6 +26,36 @@ export default function Search() {
   const [selectedId, setSelectedId] = useState(null)
   const [mobileView, setMobileView] = useState('list')
   const [showFilters, setShowFilters] = useState(false)
+  const [locationInput, setLocationInput] = useState(urlLocation || '')
+
+  // Google Places Autocomplete
+  const locationInputRef = useRef(null)
+  const autocompleteRef = useRef(null)
+
+  useEffect(() => {
+    if (!window.google?.maps?.places || !locationInputRef.current) return
+    
+    const autocomplete = new window.google.maps.places.Autocomplete(
+      locationInputRef.current,
+      {
+        types: ['(cities)'],
+        componentRestrictions: { country: 'in' },
+      }
+    )
+
+    autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace()
+      if (!place.geometry?.location) return
+
+      const lat = place.geometry.location.lat()
+      const lng = place.geometry.location.lng()
+      setMapCenter({ lat, lng })
+      setLocationInput(place.formatted_address || place.name || '')
+      setMobileView('map')
+    })
+
+    autocompleteRef.current = autocomplete
+  }, [])
 
   const filtered = LISTINGS.filter(l => {
     if (filters.state    && l.location.state    !== filters.state)                                        return false
@@ -36,11 +68,15 @@ export default function Search() {
   })
 
   const update = (k, v) => setFilters(f => ({ ...f, [k]: v }))
-  const clear  = () => setFilters({ state: '', district: '', landType: '', minPrice: '', maxPrice: '', verifiedOnly: false })
+  const clear  = () => {
+    setFilters({ state: '', district: '', landType: '', minPrice: '', maxPrice: '', verifiedOnly: false })
+    setLocationInput('')
+    setMapCenter(null)
+  }
   const activeCount = Object.values(filters).filter(v => v && v !== false).length
 
   const FiltersUI = () => (
-    <div className="space-y-3 p-4">
+    <div className="space-y-3 p-3 sm:p-4">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-slate-800 flex items-center gap-2 text-sm">
           <SlidersHorizontal size={14} className="text-primary-600" />
@@ -56,13 +92,27 @@ export default function Search() {
         )}
       </div>
 
-      {/* Location context badge */}
-      {urlLocation && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 rounded-xl text-xs text-primary-700 font-medium">
-          <Navigation size={12} className="text-primary-500 shrink-0" />
-          <span className="truncate">Near: {urlLocation}</span>
+      {/* Location Search with Google Places */}
+      <div>
+        <label className="label">Search Location</label>
+        <div className="relative">
+          <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            ref={locationInputRef}
+            type="text"
+            placeholder="e.g. Coimbatore, Chennai..."
+            value={locationInput}
+            onChange={e => setLocationInput(e.target.value)}
+            className="input text-sm pl-9"
+          />
         </div>
-      )}
+        {locationInput && (
+          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+            <Navigation size={10} className="text-primary-500" />
+            Showing listings near this location
+          </p>
+        )}
+      </div>
 
       <div>
         <label className="label">State</label>
@@ -85,17 +135,17 @@ export default function Search() {
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="label">Min (&#8377;L)</label>
+          <label className="label">Min (₹L)</label>
           <input type="number" placeholder="0" value={filters.minPrice}
             onChange={e => update('minPrice', e.target.value)} className="input text-sm" />
         </div>
         <div>
-          <label className="label">Max (&#8377;L)</label>
+          <label className="label">Max (₹L)</label>
           <input type="number" placeholder="Any" value={filters.maxPrice}
             onChange={e => update('maxPrice', e.target.value)} className="input text-sm" />
         </div>
       </div>
-      <div className="flex items-center gap-2.5 p-3 bg-primary-50 rounded-xl">
+      <div className="flex items-center gap-2.5 p-2.5 bg-primary-50 rounded-xl">
         <input type="checkbox" id="ver" checked={filters.verifiedOnly}
           onChange={e => update('verifiedOnly', e.target.checked)} className="w-4 h-4 accent-primary-600" />
         <label htmlFor="ver" className="text-xs font-semibold text-primary-700 cursor-pointer flex items-center gap-1.5">
@@ -121,15 +171,17 @@ export default function Search() {
           <div className="flex rounded-lg overflow-hidden border border-slate-200">
             <button
               onClick={() => setMobileView('list')}
-              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-all
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold transition-all
                 ${mobileView === 'list' ? 'bg-primary-600 text-white' : 'bg-white text-slate-600'}`}>
-              <LayoutList size={13} /> List
+              <LayoutList size={13} />
+              <span className="hidden xs:inline">List</span>
             </button>
             <button
               onClick={() => setMobileView('map')}
-              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-all
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold transition-all
                 ${mobileView === 'map' ? 'bg-primary-600 text-white' : 'bg-white text-slate-600'}`}>
-              <Map size={13} /> Map
+              <Map size={13} />
+              <span className="hidden xs:inline">Map</span>
             </button>
           </div>
         </div>
@@ -137,7 +189,7 @@ export default function Search() {
 
       {/* Mobile filter drawer */}
       {showFilters && (
-        <div className="md:hidden bg-white border-b border-slate-200 shadow-lg z-30 shrink-0 overflow-y-auto max-h-[60vh]">
+        <div className="md:hidden bg-white border-b border-slate-200 shadow-lg z-30 shrink-0 overflow-y-auto max-h-[70vh]">
           <FiltersUI />
         </div>
       )}
@@ -146,7 +198,7 @@ export default function Search() {
 
         {/* LEFT: filters + cards */}
         <div className={`
-          md:w-[340px] md:shrink-0 md:flex md:flex-col md:border-r md:border-slate-100 md:bg-white md:overflow-hidden
+          md:w-[340px] lg:w-[380px] md:shrink-0 md:flex md:flex-col md:border-r md:border-slate-100 md:bg-white md:overflow-hidden
           ${mobileView === 'list' ? 'flex flex-col w-full' : 'hidden'}
         `}>
           <div className="hidden md:block border-b border-slate-100 overflow-y-auto">
@@ -157,8 +209,8 @@ export default function Search() {
           </div>
           <div className="flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
-              <div className="text-center py-16 px-6">
-                <div className="text-5xl mb-4">&#127964;</div>
+              <div className="text-center py-12 sm:py-16 px-6">
+                <div className="text-4xl sm:text-5xl mb-4">🏞️</div>
                 <p className="text-slate-500 text-sm font-medium">No listings match your filters</p>
                 <button onClick={clear} className="mt-3 text-primary-600 text-sm font-semibold hover:underline">Clear all filters</button>
               </div>
@@ -182,7 +234,7 @@ export default function Search() {
           flex-1 relative
           ${mobileView === 'map' ? 'flex flex-col w-full' : 'hidden md:block'}
         `}>
-          <div className="absolute top-3 left-3 z-10 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow border border-slate-100 pointer-events-none">
+          <div className="absolute top-3 left-3 z-10 bg-white/95 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow-md border border-slate-100 pointer-events-none">
             <span className="text-xs font-bold text-slate-700">{filtered.length} on map</span>
           </div>
 
@@ -199,28 +251,28 @@ export default function Search() {
             const l = filtered.find(x => x.id === selectedId)
             if (!l) return null
             return (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 w-[min(340px,calc(100vw-24px))]">
-                <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden relative">
+              <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 w-[min(340px,calc(100vw-20px))] sm:w-[min(360px,calc(100vw-32px))]">
+                <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative">
                   <button
                     onClick={() => setSelectedId(null)}
-                    className="absolute top-2 right-2 z-10 w-6 h-6 bg-black/20 hover:bg-black/30 rounded-full flex items-center justify-center transition-colors">
-                    <X size={12} className="text-white" />
+                    className="absolute top-2 right-2 z-10 w-7 h-7 bg-black/30 hover:bg-black/40 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm">
+                    <X size={13} className="text-white" strokeWidth={2.5} />
                   </button>
                   <div className="flex">
-                    <img src={l.photos[0]} alt="" className="w-24 sm:w-28 h-[90px] object-cover shrink-0" />
-                    <div className="p-3 flex flex-col justify-between flex-1 min-w-0">
+                    <img src={l.photos[0]} alt="" className="w-24 sm:w-28 h-20 sm:h-24 object-cover shrink-0" />
+                    <div className="p-2.5 sm:p-3 flex flex-col justify-between flex-1 min-w-0">
                       <div>
-                        <p className="text-sm font-semibold text-slate-800 line-clamp-2 leading-snug pr-4">{l.title}</p>
-                        <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                        <p className="text-xs sm:text-sm font-semibold text-slate-800 line-clamp-2 leading-snug pr-5">{l.title}</p>
+                        <p className="text-[10px] sm:text-xs text-slate-400 flex items-center gap-1 mt-1">
                           <MapPin size={9} /> {l.location.district}, {l.location.state}
                         </p>
                       </div>
                       <div className="flex items-center justify-between mt-2 gap-2">
-                        <span className="font-bold text-primary-600 text-sm">{formatPrice(l.price.total)}</span>
+                        <span className="font-bold text-primary-600 text-sm sm:text-base">{formatPrice(l.price.total)}</span>
                         <Link
                           to={`/listing/${l.id}`}
-                          className="text-xs bg-primary-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-primary-700 transition-colors shrink-0">
-                          View &#8594;
+                          className="text-[11px] sm:text-xs bg-primary-600 text-white px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold hover:bg-primary-700 transition-colors shrink-0">
+                          View →
                         </Link>
                       </div>
                     </div>
@@ -239,25 +291,25 @@ function MiniCard({ listing, isSelected, onClick }) {
   return (
     <div
       onClick={onClick}
-      className={`p-3 cursor-pointer transition-all duration-150 active:bg-slate-100 ${isSelected ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
+      className={`p-2.5 sm:p-3 cursor-pointer transition-all duration-150 active:bg-slate-100 ${isSelected ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
       style={{ borderLeft: `3px solid ${isSelected ? '#16a34a' : 'transparent'}` }}>
-      <div className="flex gap-3">
+      <div className="flex gap-2.5 sm:gap-3">
         <div className="relative shrink-0">
-          <img src={listing.photos[0]} alt="" className="w-20 h-[60px] sm:h-16 object-cover rounded-xl" />
+          <img src={listing.photos[0]} alt="" className="w-20 sm:w-24 h-14 sm:h-16 object-cover rounded-xl" />
           {listing.verified && (
-            <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary-600 rounded-full flex items-center justify-center shadow">
+            <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary-600 rounded-full flex items-center justify-center shadow-md">
               <BadgeCheck size={11} className="text-white" />
             </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-slate-800 line-clamp-2 leading-snug">{listing.title}</p>
-          <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+          <p className="text-xs sm:text-sm font-semibold text-slate-800 line-clamp-2 leading-snug">{listing.title}</p>
+          <p className="text-[10px] sm:text-xs text-slate-500 flex items-center gap-1 mt-0.5 sm:mt-1">
             <MapPin size={9} /> {listing.location.district}, {listing.location.state}
           </p>
           <div className="flex items-center justify-between mt-1.5 gap-1">
-            <span className="text-sm font-bold text-primary-600">{formatPrice(listing.price.total)}</span>
-            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full shrink-0">{formatArea(listing.area)}</span>
+            <span className="text-sm sm:text-base font-bold text-primary-600">{formatPrice(listing.price.total)}</span>
+            <span className="text-[10px] sm:text-xs text-slate-400 bg-slate-100 px-1.5 sm:px-2 py-0.5 rounded-full shrink-0">{formatArea(listing.area)}</span>
           </div>
         </div>
       </div>
