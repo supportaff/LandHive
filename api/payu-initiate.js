@@ -75,48 +75,29 @@ export default async function handler(req, res) {
     ].join('|')
     const hash = crypto.createHash('sha512').update(hashStr).digest('hex')
 
-    // ── Save payment record to MongoDB ─────────────────────────────────────
-    const db = await getDb()
-    await db.collection('payments').insertOne({
+    // ── Save payment record to Supabase ─────────────────────────────────────
+    const supabase = getDb()
+    const { error: insertError } = await supabase.from('payments').insert([{
       txnid,
-      userId,
-      listingId,
+      user_id:      userId,
+      listing_id:   listingId,
       productinfo:  productinfo || 'LandHive Listing Fee',
       firstname:    userName,
       email:        userEmail,
       phone:        contactPhone,
       amount:       parseFloat(amount),
-      currency:     'INR',
-      mode:         isLive ? 'live' : 'test',  // track test vs live
       status:       'initiated',
-      udf1:         listingId,
-      udf2:         userId,
-      payuHash:     hash,
-      // — populated by payu-webhook after payment —
-      mihpayid:     null,
-      paymentMode:  null,
-      bankCode:     null,
-      bankRefNum:   null,
-      cardNum:      null,
-      nameOnCard:   null,
-      issuingBank:  null,
-      errorCode:    null,
-      errorMessage: null,
-      responseHash: null,
-      hashValid:    null,
-      rawResponse:  null,
-      initiatedAt:  new Date(),
-      completedAt:  null,
-      createdAt:    new Date(),
-      updatedAt:    new Date(),
-    })
+      mode:         isLive ? 'live' : 'test',
+      raw_response: { hash },
+    }])
+
+    if (insertError) throw insertError
 
     // ── Mark listing as awaiting payment ──────────────────────────────────
-    const { ObjectId } = await import('mongodb')
-    await db.collection('listings').updateOne(
-      { _id: new ObjectId(listingId) },
-      { $set: { status: 'awaiting_payment', updatedAt: new Date() } }
-    )
+    await supabase
+      .from('listings')
+      .update({ status: 'awaiting_payment' })
+      .eq('id', listingId)
 
     const appUrl = process.env.APP_URL || 'https://landhive.in'
 

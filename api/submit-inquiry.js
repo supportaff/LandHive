@@ -1,7 +1,6 @@
 // api/submit-inquiry.js — POST /api/submit-inquiry
-// Saves buyer inquiry to MongoDB and notifies seller + buyer via email
+// Saves buyer inquiry to Supabase and notifies seller + buyer via email
 import { createClerkClient } from '@clerk/backend'
-import { ObjectId } from 'mongodb'
 import { getDb } from './lib/db.js'
 import { mail } from './lib/mailer.js'
 
@@ -27,42 +26,51 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'listingId, buyerName and buyerPhone are required' })
     }
 
-    const db = await getDb()
+    const supabase = getDb()
 
     // Fetch listing to get seller details
-    const listing = await db.collection('listings').findOne(
-      { _id: new ObjectId(listingId) },
-      { projection: { title: 1, 'seller.name': 1, 'seller.email': 1, 'seller.phone': 1, 'seller.whatsapp': 1, 'seller.userId': 1, 'location.district': 1 } }
-    )
+    const { data: listing, error: fetchError } = await supabase
+      .from('listings')
+      .select('id, title, user_id, seller_name, seller_email, seller_phone, seller_whatsapp, location_district')
+      .eq('id', listingId)
+      .single()
 
-    if (!listing) return res.status(404).json({ error: 'Listing not found' })
+    if (fetchError || !listing) return res.status(404).json({ error: 'Listing not found' })
 
     const inquiry = {
-      listingId,
-      listingTitle:  listing.title,
-      sellerId:      listing.seller.userId,
-      buyerId,
-      buyerName,
-      buyerPhone,
-      buyerEmail:    buyerEmail || '',
+      listing_id:    listingId,
+      listing_title: listing.title,
+      seller_id:     listing.user_id,
+      buyer_id:      buyerId,
+      buyer_name:    buyerName,
+      buyer_phone:   buyerPhone,
+      buyer_email:   buyerEmail || '',
       message:       message   || '',
-      status:        'new',   // new | contacted | closed
-      createdAt:     new Date(),
+      status:        'new',
     }
 
-    await db.collection('inquiries').insertOne(inquiry)
+    const { error: insertError } = await supabase.from('inquiries').insert([inquiry])
+    if (insertError) throw insertError
 
     // Increment inquiry count on listing
-    await db.collection('listings').updateOne(
-      { _id: new ObjectId(listingId) },
-      { $inc: { inquiryCount: 1 }, $set: { updatedAt: new Date() } }
-    )
+    const { data: current } = await supabase
+      .from('listings')
+      .select('inquiry_count')
+      .eq('id', listingId)
+      .single()
+
+    if (current) {
+      await supabase
+        .from('listings')
+        .update({ inquiry_count: (current.inquiry_count || 0) + 1 })
+        .eq('id', listingId)
+    }
 
     // Send emails in parallel
     await Promise.allSettled([
       // Seller notification
-      mail.newInquiry(listing.seller.email, {
-        sellerName:   listing.seller.name,
+      mail.newInquiry(listing.seller_email, {
+        sellerName:   listing.seller_name,
         listingTitle: listing.title,
         listingId,
         buyerName,
@@ -75,8 +83,8 @@ export default async function handler(req, res) {
         buyerName,
         listingTitle: listing.title,
         listingId,
-        district:     listing.location?.district || 'Tamil Nadu',
-        sellerPhone:  listing.seller.phone,
+        district:     listing.location_district || 'Tamil Nadu',
+        sellerPhone:  listing.seller_phone,
       }) : Promise.resolve(),
       // Admin log
       mail.adminInquiry({
@@ -85,7 +93,7 @@ export default async function handler(req, res) {
         buyerName,
         buyerEmail:   buyerEmail || '',
         buyerPhone,
-        sellerName:   listing.seller.name,
+        sellerName:   listing.seller_name,
         message,
       }),
     ])

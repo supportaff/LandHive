@@ -1,6 +1,6 @@
 // api/welcome-email.js — POST /api/welcome-email
 // Called from frontend after Clerk sign-up to send welcome email
-// and upsert user document in MongoDB
+// and upsert user document in Supabase
 import { createClerkClient } from '@clerk/backend'
 import { getDb } from './lib/db.js'
 import { mail } from './lib/mailer.js'
@@ -24,17 +24,22 @@ export default async function handler(req, res) {
   try {
     const { name, email, role = 'buyer' } = req.body
 
-    const db = await getDb()
+    const supabase = getDb()
 
     // Upsert user (idempotent — safe to call multiple times)
-    await db.collection('users').updateOne(
-      { clerkId: userId },
-      {
-        $setOnInsert: { clerkId: userId, createdAt: new Date(), totalPaid: 0, totalListings: 0 },
-        $set: { name, email, role, updatedAt: new Date() },
-      },
-      { upsert: true }
-    )
+    const { error } = await supabase
+      .from('users')
+      .upsert(
+        {
+          clerk_id: userId,
+          name,
+          email,
+          role,
+        },
+        { onConflict: 'clerk_id', ignoreDuplicates: false }
+      )
+
+    if (error) throw error
 
     // Send welcome email (fire-and-forget)
     await mail.welcome(email, { name, role })

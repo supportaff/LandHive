@@ -1,7 +1,6 @@
 // api/payu-webhook.js — POST /api/payu-webhook
 // PayU IPN handler — called server-to-server by PayU after every payment
 import crypto from 'crypto'
-import { ObjectId } from 'mongodb'
 import { getDb } from './lib/db.js'
 import { mail } from './lib/mailer.js'
 
@@ -46,58 +45,61 @@ export default async function handler(req, res) {
       console.warn(`[webhook] Hash mismatch for txnid=${txnid} — possible tamper attempt`)
     }
 
-    const db  = await getDb()
-    const now = new Date()
+    const supabase = getDb()
+    const now = new Date().toISOString()
 
     // ── Update payment record ────────────────────────────────────────────────
-    await db.collection('payments').updateOne(
-      { txnid },
-      {
-        $set: {
-          mihpayid:     mihpayid     || null,
-          status,
-          paymentMode:  paymentMode  || null,
-          bankCode:     bankCode     || null,
-          bankRefNum:   bank_ref_num || null,
-          cardNum:      cardnum ? cardnum.replace(/\d(?=\d{4})/g, '*') : null,
-          nameOnCard:   name_on_card || null,
-          issuingBank:  issuing_bank || null,
-          errorCode:    error_code   || null,
-          errorMessage: error_Message || null,
-          responseHash: responseHash || null,
-          hashValid,
-          mode:         isLive ? 'live' : 'test',
-          rawResponse:  body,
-          completedAt:  now,
-          updatedAt:    now,
-        },
-      }
-    )
+    await supabase
+      .from('payments')
+      .update({
+        mihpayid:      mihpayid     || null,
+        status,
+        payment_mode:  paymentMode  || null,
+        bank_code:     bankCode     || null,
+        bank_ref_num:  bank_ref_num || null,
+        card_num:      cardnum ? cardnum.replace(/\d(?=\d{4})/g, '*') : null,
+        name_on_card:  name_on_card || null,
+        issuing_bank:  issuing_bank || null,
+        error_code:    error_code   || null,
+        error_message: error_Message || null,
+        response_hash: responseHash || null,
+        hash_valid:    hashValid,
+        mode:          isLive ? 'live' : 'test',
+        raw_response:  body,
+        completed_at:  now,
+      })
+      .eq('txnid', txnid)
 
     // ── SUCCESS ──────────────────────────────────────────────────────────────
     if (status === 'success' && hashValid && udf1) {
       try {
-        await db.collection('listings').updateOne(
-          { _id: new ObjectId(udf1) },
-          {
-            $set: {
-              'payment.status':   'paid',
-              'payment.txnid':    txnid,
-              'payment.mihpayid': mihpayid,
-              'payment.amount':   parseFloat(amount),
-              'payment.mode':     paymentMode || 'online',
-              'payment.paidAt':   now,
-              status:             'pending_kyc',
-              updatedAt:          now,
-            },
-          }
-        )
+        await supabase
+          .from('listings')
+          .update({
+            payment_status:   'paid',
+            payment_txnid:    txnid,
+            payment_mihpayid: mihpayid,
+            payment_amount:   parseFloat(amount),
+            payment_mode:     paymentMode || 'online',
+            payment_paid_at:  now,
+            status:           'pending_kyc',
+          })
+          .eq('id', udf1)
 
         if (udf2) {
-          await db.collection('users').updateOne(
-            { clerkId: udf2 },
-            { $inc: { totalPaid: parseFloat(amount) }, $set: { updatedAt: now } }
-          )
+          // Increment total_paid for user
+          const { data: user } = await supabase
+            .from('users')
+            .select('total_paid')
+            .eq('clerk_id', udf2)
+            .single()
+
+          if (user) {
+            await supabase
+              .from('users')
+              .update({ total_paid: (user.total_paid || 0) + parseFloat(amount) })
+              .eq('clerk_id', udf2)
+          }
         }
 
         // Fire both emails in parallel, non-blocking
@@ -120,10 +122,11 @@ export default async function handler(req, res) {
 
     // ── FAILURE ──────────────────────────────────────────────────────────────
     if (status === 'failure' && udf1) {
-      await db.collection('listings').updateOne(
-        { _id: new ObjectId(udf1) },
-        { $set: { 'payment.status': 'failed', status: 'pending', updatedAt: now } }
-      ).catch(e => console.error('Listing failure update error:', e))
+      await supabase
+        .from('listings')
+        .update({ payment_status: 'failed', status: 'pending' })
+        .eq('id', udf1)
+        .catch(e => console.error('Listing failure update error:', e))
     }
 
     return res.status(200).json({ received: true, hashValid, env: isLive ? 'live' : 'test' })

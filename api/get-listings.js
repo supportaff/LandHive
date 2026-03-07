@@ -1,5 +1,5 @@
 // api/get-listings.js — GET /api/get-listings
-// Returns approved listings from MongoDB with filter + pagination support
+// Returns approved listings from Supabase with filter + pagination support
 //
 // Query params:
 //   district, landType, maxPrice, minPrice
@@ -8,14 +8,6 @@
 //   featured ("true" to return only featured)
 
 import { getDb } from './lib/db.js'
-
-// Fields to strip from public listing response
-const SAFE_PROJECTION = {
-  'kyc.aadhaarNumber':  0,
-  'kyc.panNumber':      0,
-  'seller.whatsapp':    0,
-  'kyc.aadhaarName':    0,
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
@@ -30,52 +22,63 @@ export default async function handler(req, res) {
       state,
     } = req.query
 
-    // Only show approved listings publicly
-    const filter = { status: 'approved' }
+    const supabase = getDb()
+    let query = supabase
+      .from('listings')
+      .select('*', { count: 'exact' })
+      .eq('status', 'approved')
 
-    if (state)    filter['location.state']    = state
-    if (district) filter['location.district'] = district
-    if (landType) filter.landType             = landType
-    if (featured === 'true') filter.featured  = true
+    // Filters
+    if (state)    query = query.eq('location_state', state)
+    if (district) query = query.eq('location_district', district)
+    if (landType) query = query.eq('land_type', landType)
+    if (featured === 'true') query = query.eq('featured', true)
 
     // Price range
-    if (maxPrice || minPrice) {
-      filter['price.total'] = {}
-      if (maxPrice) filter['price.total'].$lte = parseFloat(maxPrice)
-      if (minPrice) filter['price.total'].$gte = parseFloat(minPrice)
-    }
+    if (maxPrice) query = query.lte('price_total', parseFloat(maxPrice))
+    if (minPrice) query = query.gte('price_total', parseFloat(minPrice))
 
-    // Bounding box radius filter (no 2dsphere index needed)
+    // Bounding box radius filter (no PostGIS needed for simple radius)
     if (lat && lng) {
       const km      = parseFloat(radius) || 50
       const latF    = parseFloat(lat)
       const lngF    = parseFloat(lng)
       const latDeg  = km / 111
       const lngDeg  = km / (111 * Math.cos(latF * Math.PI / 180))
-      filter['location.lat'] = { $gte: latF - latDeg, $lte: latF + latDeg }
-      filter['location.lng'] = { $gte: lngF - lngDeg, $lte: lngF + lngDeg }
+      query = query
+        .gte('location_lat', latF - latDeg)
+        .lte('location_lat', latF + latDeg)
+        .gte('location_lng', lngF - lngDeg)
+        .lte('location_lng', lngF + lngDeg)
     }
 
-    const db       = await getDb()
+    // Pagination
     const pageNum  = Math.max(1, parseInt(page))
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)))
-    const skip     = (pageNum - 1) * limitNum
+    const from     = (pageNum - 1) * limitNum
+    const to       = from + limitNum - 1
 
-    const [listings, total] = await Promise.all([
-      db.collection('listings')
-        .find(filter, { projection: SAFE_PROJECTION })
-        .sort({ featured: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .toArray(),
-      db.collection('listings').countDocuments(filter),
-    ])
+    // Sort: featured first, then newest
+    query = query
+      .order('featured', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    const { data: listings, error, count } = await query
+
+    if (error) throw error
+
+    // Strip sensitive fields (KYC)
+    const safeListings = (listings || []).map(l => {
+      const { kyc_aadhaar_number, kyc_pan_number, kyc_aadhaar_name, seller_whatsapp, ...rest } = l
+      return rest
+    })
 
     return res.status(200).json({
-      listings: listings.map(l => ({ ...l, _id: l._id.toString() })),
-      total,
-      page:  pageNum,
-      pages: Math.ceil(total / limitNum),
+      listings: safeListings,
+      total:    count || 0,
+      page:     pageNum,
+      pages:    Math.ceil((count || 0) / limitNum),
     })
   } catch (error) {
     console.error('get-listings error:', error)
