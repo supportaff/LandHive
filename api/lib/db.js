@@ -1,59 +1,53 @@
-// api/lib/db.js — MongoDB Atlas connection for LandHive on Vercel
+// api/lib/db.js — Supabase PostgreSQL connection for LandHive
 //
-// Uses Vercel's attachDatabasePool() for proper connection lifecycle:
-// — Gracefully suspends/resumes the client during Vercel Fluid Compute
-// — Prevents connection leaks on serverless cold starts
+// Uses Supabase JS client for serverless-optimized Postgres access.
+// Connection pooling handled by Supabase's Supavisor.
 //
-// Env var: LH_MONGODB_URI
-// Format:  mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+// Env vars:
+//   NEXT_PUBLIC_LH_SUPABASE_URL        — Supabase project URL
+//   LH_SUPABASE_SERVICE_ROLE_KEY       — Service role key (bypass RLS, full access)
+//
+// For client-side auth-aware queries (from React):
+//   Use NEXT_PUBLIC_LH_SUPABASE_URL + LH_SUPABASE_ANON_KEY
 
-import { MongoClient } from 'mongodb'
-import { attachDatabasePool } from '@vercel/functions'
+import { createClient } from '@supabase/supabase-js'
 
-const uri = process.env.LH_MONGODB_URI
-if (!uri) throw new Error('\u274C LH_MONGODB_URI is not set in environment variables')
+const supabaseUrl = process.env.NEXT_PUBLIC_LH_SUPABASE_URL
+const serviceKey  = process.env.LH_SUPABASE_SERVICE_ROLE_KEY
 
-const options = {
-  appName:       'landhive.vercel',  // shows in Atlas monitoring
-  maxIdleTimeMS: 5000,               // close idle connections after 5s (Vercel serverless friendly)
-  maxPoolSize:   10,                 // max concurrent connections per function instance
-  serverSelectionTimeoutMS: 5000,    // fail fast if Atlas is unreachable
-  socketTimeoutMS: 45000,
-}
-
-const client = new MongoClient(uri, options)
-
-// Register with Vercel — automatically calls client.close() on function
-// suspension and allows reconnect on resume (Fluid Compute support)
-attachDatabasePool(client)
+if (!supabaseUrl) throw new Error('❌ NEXT_PUBLIC_LH_SUPABASE_URL is not set')
+if (!serviceKey)  throw new Error('❌ LH_SUPABASE_SERVICE_ROLE_KEY is not set')
 
 /**
- * Returns a connected MongoDB database instance.
- * client.connect() is idempotent in MongoDB driver v6:
- *   — No-op if already connected
- *   — Reconnects automatically after a close (Vercel suspend/resume)
- *
- * @param {string} dbName — defaults to 'landhive'
- * @returns {Promise<import('mongodb').Db>}
+ * Server-side Supabase client with SERVICE ROLE key.
+ * Bypasses Row Level Security — use only in API routes.
+ * DO NOT expose this client to the browser.
  */
-export async function getDb(dbName = 'landhive') {
-  await client.connect()
-  return client.db(dbName)
+export const supabase = createClient(supabaseUrl, serviceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+})
+
+/**
+ * Helper: get Supabase client (alias for backward compat with MongoDB code)
+ * @returns {import('@supabase/supabase-js').SupabaseClient}
+ */
+export function getDb() {
+  return supabase
 }
 
 /**
- * MongoDB Collections used in LandHive:
+ * PostgreSQL Tables in Supabase:
  *
- *  landhive.listings    — property listings (status: pending|pending_kyc|approved|rejected)
- *  landhive.payments    — PayU transactions (mirrored from webhook)
- *  landhive.users       — extended Clerk user profiles + roles
- *  landhive.inquiries   — buyer inquiries to sellers
+ *  public.listings       — property listings
+ *  public.payments       — PayU payment transactions
+ *  public.users          — extended Clerk user profiles
+ *  public.inquiries      — buyer inquiries to sellers
  *
- * Indexes to create in Atlas:
- *  listings: { status:1, 'location.district':1, landType:1, 'price.total':1, createdAt:-1 }
- *  listings: { 'location.lat':1, 'location.lng':1 } — for geo filtering
- *  users:    { clerkId:1 } unique
- *  payments: { txnid:1  } unique
+ * Schema file: /supabase/schema.sql
+ * Indexes and RLS policies are defined there.
  */
 
-export default client
+export default supabase
